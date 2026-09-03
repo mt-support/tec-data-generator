@@ -1,0 +1,35 @@
+.rsvp-loadgen-progress {
+	max-width: 480px;
+	margin-top: 16px;
+}
+
+.rsvp-loadgen-progress-bar {
+	background: #e5e5e5;
+	border-radius: 3px;
+	height: 20px;
+	overflow: hidden;
+}
+
+.rsvp-loadgen-progress-fill {
+	background: #2271b1;
+	height: 100%;
+	width: 0;
+	transition: width 0.2s ease;
+}
+
+.rsvp-loadgen-progress-label {
+	margin: 6px 0 0;
+	font-size: 13px;
+}
+
+/* WP admin's own `.spinner` is loaded by wp-admin core, we just align it next to a button. */
+.rsvp-loadgen-spinner {
+	float: none;
+	vertical-align: middle;
+	margin: 0 0 0 6px;
+}
+
+.rsvp-loadgen-notice {
+	max-width: 640px;
+	margin: 12px 0;
+}

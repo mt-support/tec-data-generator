@@ -1,0 +1,202 @@
+# RSVP Migration Load Generator
+
+A standalone QA tool that generates bulk **legacy V1 RSVP** test data — Events, Pages, and Posts, each with
+an RSVP ticket and a batch of attendees — so the `rsvp-to-tc` migration in
+[Event Tickets](../event-tickets) can be stress-tested against thousands of tickets/attendees at once before
+it ships broadly.
+
+This is **not** part of Event Tickets. It's a separate, throwaway plugin meant to be shared with QA, run
+once (or a few times) against a disposable test site, and removed.
+
+## TL;DR
+
+```bash
+# Drop this folder into wp-content/plugins/, activate it, then:
+wp rsvp-loadgen scenario --type=usual     # realistic QA data: 25-250 events, 1-3 RSVPs each, some orphaned
+wp rsvp-loadgen scenario --type=edge      # the edge case: 7k-11k events, 1-9 RSVPs each, some orphaned
+wp rsvp-loadgen migrate                   # migrate it to Tickets Commerce (runs in the background)
+wp rsvp-loadgen revert                    # ...or put it back to V1 to migrate again
+wp rsvp-loadgen cleanup                   # remove everything this tool created
+```
+
+No setup beyond having Event Tickets + The Events Calendar active — no Composer, no build step, no manual
+config. See "Recommended first run" below before scaling up to thousands of tickets.
+
+## Requirements
+
+- WordPress with **Event Tickets** and **The Events Calendar** active (both are read directly — no version
+  checks beyond class/function existence).
+- Nothing else. No Composer install, no build step — just drop the folder into `wp-content/plugins/` and
+  activate it like any other plugin. Background scenario runs use Action Scheduler, which Event Tickets
+  already bundles — there's nothing extra to install for that either.
+
+## What it generates
+
+For each unit:
+
+1. One post — an Event (`tribe_events`, created via The Events Calendar's own repository so it has valid
+   dates), a Page, or a Post — round-robined so the total splits evenly across all three types.
+2. One or more legacy RSVP tickets (`tribe_rsvp_tickets`) on that post (`generate` always creates exactly 1;
+   `scenario` creates a random number per unit within its preset range), each created through the same
+   production code path (`Tribe__Tickets__RSVP::ticket_add()`) a real user going through the classic editor
+   metabox would hit — not a raw `wp_insert_post()`. Capacity is randomized (20–200).
+3. A random number of attendees (`tribe_rsvp_attendees`) per ticket within the configured min/max range,
+   capped at the ticket's capacity, spread across a random number of `_tribe_rsvp_order` groups — so a single
+   ticket can produce several distinct "orders" once migrated, not just one. ~90% are marked "going".
+
+Everything created is tagged with `_rsvp_loadgen_generated = 1` (plus a run ID). **Nothing untagged is ever
+touched** — cleanup only ever deletes what this tool created.
+
+### Orphaned RSVPs (the edge case)
+
+`scenario` also force-deletes a random percentage of the generated container posts (Events/Pages/Posts) after
+generation, while leaving their RSVP ticket(s) and attendees in place — this is the "event was deleted but its
+RSVP data wasn't" edge case, the main reason this tool exists. The orphaned tickets/attendees stay tagged, so
+`cleanup` still finds and removes them afterward even though their parent post is gone.
+
+It also filters `tribe_tickets_post_types` at runtime so RSVP tickets can attach to Events, Pages, *and*
+Posts (the Event Tickets default only enables Events + Pages). This filter goes away the moment the plugin is
+deactivated — it doesn't rewrite the site's stored option.
+
+## Usage: WP-CLI (recommended for real load)
+
+The admin page (below) is chunked to avoid timeouts, but for anything past a few hundred tickets, WP-CLI is
+faster and has no request-timeout ceiling:
+
+```bash
+# Generate 5000 tickets (the default), split evenly across Event/Page/Post
+wp rsvp-loadgen generate --count=5000
+
+# Custom attendee range, smaller run
+wp rsvp-loadgen generate --count=200 --min-attendees=5 --max-attendees=50
+
+# Realistic QA scenario: 25-250 units, 1-3 RSVP tickets each, 5%-20% orphaned
+wp rsvp-loadgen scenario --type=usual
+
+# Edge-case scenario: 7000-11000 units, 1-9 RSVP tickets each, 5%-20% orphaned
+wp rsvp-loadgen scenario --type=edge
+
+# Remove everything this tool has ever generated
+wp rsvp-loadgen cleanup
+
+# Remove only one specific run (see the run_ ID logged at the start of `generate`/`scenario`)
+wp rsvp-loadgen cleanup --run=run_20260715_153000_ab12cd
+
+# Run the rsvp-to-tc migration forward (V1 RSVP -> Tickets Commerce)
+wp rsvp-loadgen migrate
+
+# Revert it back to V1, so the same generated data can be migrated again
+wp rsvp-loadgen revert
+```
+
+Flags for `generate`: `--count` (default 5000), `--min-attendees` (default 1), `--max-attendees` (default
+20), `--batch-size` (default 100 — how many units are generated per internal progress tick; does not change
+the total, just how often it logs).
+
+Flags for `scenario`: `--type` (required, `usual` or `edge`), plus the same `--min-attendees`/`--max-attendees`
+(defaults 1/20) and `--batch-size` (default 100) as `generate`. The unit count and orphan rate are picked via
+`wp_rand()` within the scenario's preset range and printed before generation starts — every run of the same
+`--type` produces a different concrete size/orphan-rate, by design. Presets (`includes/class-data.php`):
+
+| type    | units          | RSVP tickets/unit | orphan rate |
+|---------|----------------|--------------------|-------------|
+| `usual` | 25–250         | 1–3                | 5%–20%      |
+| `edge`  | 7,000–11,000   | 1–9                | 5%–20%      |
+
+Flags for `cleanup`: `--run` (optional, scopes cleanup to one run), `--batch-size` (default 200).
+
+`migrate`/`revert` just schedule the migration's full run — the actual batch processing happens in the
+background via Shepherd/Action Scheduler, the same as clicking "Run"/"Rollback" on the core (hidden)
+Migrations admin page. The command returns as soon as scheduling succeeds; it doesn't wait for the migration
+to finish. If either command errors, it's almost always because the migration isn't in a state that allows
+that operation yet — see "Migration controls" below.
+
+## Usage: Admin page (no CLI/SSH access)
+
+Go to **Tools → RSVP Load Generator**. The page has three sections:
+
+- **Scenario (recommended)** — pick **Usual** or **Edge case** from the dropdown and click **Generate
+  scenario**. Both run entirely in the background via Action Scheduler (the same mechanism the migration
+  controls below already use): the button schedules the job and returns immediately, resolving a concrete unit
+  count and orphan rate via `wp_rand()` just like the CLI's `scenario` command. **You can close the tab or
+  navigate away as soon as it starts** — generation continues server-side, and reopening the page resumes the
+  progress bar automatically. When it finishes, a notice reports exactly what was created (units, RSVP
+  tickets, attendees, orphaned count) or, if something went wrong, what failed.
+- **Generate (advanced: plain, no orphaning)** — the original form: total count, min/max attendees, and
+  **Generate** / **Cleanup** buttons, chunked via AJAX with a progress bar (this one *does* need the tab kept
+  open, unlike Scenario). Use this only if you specifically want plain data (1 RSVP ticket per unit, nothing
+  orphaned) instead of a scenario.
+- **Migration controls** — shows the `rsvp-to-tc` migration's current status, and **Run migration** /
+  **Revert to V1** buttons. Both are disabled when the migration isn't in a state that allows that operation
+  (e.g. "Run" is disabled while a migration is already running; "Revert to V1" only enables once a migration
+  has actually completed). Clicking either schedules the full run/rollback in the background and polls status
+  every few seconds until it settles.
+
+Generate/Scenario/Cleanup all lock each other while one is running, so you can't accidentally kick off two
+overlapping runs from the same tab. Only one scenario can run at a time site-wide — starting a second one
+while another is still in progress is rejected with a message naming the run already in flight.
+
+## Recommended first run
+
+Before generating 5000+ on a shared QA site, verify the tool and the migration agree on a small batch first:
+
+```bash
+wp rsvp-loadgen generate --count=30
+# spot-check a couple of generated tickets/attendees in wp-admin (Attendees report, single ticket page)
+wp rsvp-loadgen migrate
+# wait for it to finish (watch status on the admin page, or `wp tec migrations executions rsvp-to-tc`),
+# confirm the 30 tickets migrated cleanly, then:
+wp rsvp-loadgen cleanup
+```
+
+Once that's clean, scale up to the real load-test size, and use `wp rsvp-loadgen revert` between test runs
+to put the same data back into V1 shape without regenerating it.
+
+## Example commands (copy-paste)
+
+Common QA needs, end to end:
+
+```bash
+# "I just want to sanity-check the migration works at all."
+wp rsvp-loadgen generate --count=30
+wp rsvp-loadgen migrate
+wp rsvp-loadgen cleanup
+
+# "I want realistic day-to-day data, migrate it, then reset and try again."
+wp rsvp-loadgen scenario --type=usual
+wp rsvp-loadgen migrate
+# ...inspect results, then either:
+wp rsvp-loadgen revert          # put it back to V1 and migrate again, or
+wp rsvp-loadgen cleanup         # tear it all down and start fresh
+
+# "I need to stress-test the migration at the scale that broke it in the field."
+wp rsvp-loadgen scenario --type=edge --batch-size=250
+wp rsvp-loadgen migrate
+# this can take a while both to generate and to migrate — check status with:
+wp tec migrations executions rsvp-to-tc
+
+# "I want a scenario, but with heavier attendee counts than the preset default."
+wp rsvp-loadgen scenario --type=usual --min-attendees=10 --max-attendees=100
+
+# "I have several runs on this site and only want to remove one of them."
+wp rsvp-loadgen cleanup --run=run_20260715_153000_ab12cd
+
+# "Something's wrong and I want a completely clean slate before trying again."
+wp rsvp-loadgen cleanup
+```
+
+## Safety notes
+
+- This tool wraps generation in WordPress's own bulk-import guards (`wp_defer_term_counting`,
+  `wp_suspend_cache_invalidation`, etc.) to keep large runs performant, flushing the object cache at the end
+  of each internal chunk.
+- Cleanup deletes leaf-to-root (attendees → tickets → container posts) and force-deletes
+  (`wp_delete_post( $id, true )`) rather than trashing, so re-running `cleanup` fully resets the site.
+- Do not install this on a production site. It has no safeguards against being pointed at real content
+  beyond the fact that it only ever touches posts it tagged itself.
+- The Run/Revert controls schedule the *entire* migration (every batch), not just this tool's generated
+  data — on a site with other legacy RSVP data lying around, running the migration will migrate that too.
+  This tool doesn't scope the migration operation itself, only the test data it generates.
+- `scenario --type=edge` can create a *lot* of posts (up to 11,000 units × up to 9 RSVP tickets each × up to
+  20 attendees per ticket). Expect a long-running command and a sizable database — make sure you're on
+  disposable QA infrastructure, not a shared or resource-constrained box, before running it.
