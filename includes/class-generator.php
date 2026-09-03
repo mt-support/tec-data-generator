@@ -100,6 +100,56 @@ class Generator {
 	}
 
 	/**
+	 * Adds RSVP tickets to an existing event, outside the normal generate_batch() unit flow —
+	 * backs the standalone `add-rsvp` CLI/AJAX command.
+	 *
+	 * @param array{capacity?:int,stock?:int,unlimited_capacity?:bool} $options
+	 *
+	 * @return int[] Created ticket IDs.
+	 */
+	public function add_rsvp_tickets( int $event_id, int $quantity, array $options = [] ): array {
+		$ticket_ids = [];
+
+		for ( $i = 0; $i < $quantity; $i++ ) {
+			$ticket_id = $this->create_adhoc_rsvp_ticket( $event_id, $options );
+
+			if ( $ticket_id ) {
+				$ticket_ids[] = $ticket_id;
+			}
+		}
+
+		return $ticket_ids;
+	}
+
+	private function create_adhoc_rsvp_ticket( int $event_id, array $options ): int {
+		$unlimited = ! empty( $options['unlimited_capacity'] );
+		$capacity  = $unlimited ? '' : ( $options['capacity'] ?? wp_rand( 20, 200 ) );
+		$stock     = $unlimited ? '' : ( $options['stock'] ?? $capacity );
+
+		$data = [
+			'ticket_name'             => 'RSVP ' . uniqid(),
+			'ticket_description'      => 'Generated RSVP ticket added to existing event.',
+			'ticket_show_description' => 1,
+			'ticket_price'            => 0,
+			'tribe-ticket'            => [
+				'mode'     => \Tribe__Tickets__Global_Stock::OWN_STOCK_MODE,
+				'capacity' => $capacity,
+				'stock'    => $stock,
+			],
+		];
+
+		$ticket_id = tribe( 'tickets.rsvp' )->ticket_add( $event_id, $data );
+
+		if ( ! $ticket_id ) {
+			return 0;
+		}
+
+		$this->tag_generated( (int) $ticket_id, 'ticket' );
+
+		return (int) $ticket_id;
+	}
+
+	/**
 	 * Round-robins post types by global sequence, guaranteeing an even 3-way split
 	 * regardless of how many chunked calls it takes to reach the total count.
 	 */
