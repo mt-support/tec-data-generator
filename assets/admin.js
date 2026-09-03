@@ -26,6 +26,20 @@
 	var migrationNoticeEl = document.getElementById( 'rsvp-loadgen-migration-notice' );
 	var migrationPollTimer = null;
 
+	var scenarioWithVenuesEl = document.getElementById( 'rsvp-loadgen-scenario-with-venues' );
+	var scenarioWithOrganizersEl = document.getElementById( 'rsvp-loadgen-scenario-with-organizers' );
+	var withVenuesEl = document.getElementById( 'rsvp-loadgen-with-venues' );
+	var withOrganizersEl = document.getElementById( 'rsvp-loadgen-with-organizers' );
+
+	var addonNoticeEl = document.getElementById( 'rsvp-loadgen-addon-notice' );
+
+	var addRsvpBtn = document.getElementById( 'rsvp-loadgen-addrsvp-btn' );
+	var addRsvpSpinner = document.getElementById( 'rsvp-loadgen-addrsvp-spinner' );
+	var addTicketsBtn = document.getElementById( 'rsvp-loadgen-addtickets-btn' );
+	var addTicketsSpinner = document.getElementById( 'rsvp-loadgen-addtickets-spinner' );
+	var addAttendeesBtn = document.getElementById( 'rsvp-loadgen-addattendees-btn' );
+	var addAttendeesSpinner = document.getElementById( 'rsvp-loadgen-addattendees-spinner' );
+
 	// Toggles WP admin's own `.spinner` (built into wp-admin core CSS, no extra asset needed).
 	function setSpinner( el, active ) {
 		if ( ! el ) {
@@ -97,7 +111,7 @@
 		} );
 	}
 
-	function runGenerateLoop( total, minAttendees, maxAttendees ) {
+	function runGenerateLoop( total, minAttendees, maxAttendees, withVenues, withOrganizers ) {
 		var runId = null;
 
 		function step() {
@@ -105,6 +119,8 @@
 				total: total,
 				min_attendees: minAttendees,
 				max_attendees: maxAttendees,
+				with_venues: withVenues,
+				with_organizers: withOrganizers,
 				chunk_size: RSVPLoadgen.chunkSize,
 				run_id: runId || '',
 			} ).then( function ( res ) {
@@ -223,7 +239,11 @@
 			setSpinner( scenarioSpinner, true );
 			setNotice( scenarioNoticeEl, 'info', '' );
 
-			postAjax( RSVPLoadgen.actions.scheduleScenario, { type: type } ).then( function ( res ) {
+			postAjax( RSVPLoadgen.actions.scheduleScenario, {
+				type: type,
+				with_venues: scenarioWithVenuesEl && scenarioWithVenuesEl.checked ? 1 : 0,
+				with_organizers: scenarioWithOrganizersEl && scenarioWithOrganizersEl.checked ? 1 : 0,
+			} ).then( function ( res ) {
 				if ( ! res || ! res.success ) {
 					var message = ( res && res.data && res.data.message ) || 'Error starting scenario. See console/logs for details.';
 					setSpinner( scenarioSpinner, false );
@@ -279,6 +299,8 @@
 			var total = parseInt( document.getElementById( 'rsvp-loadgen-total' ).value, 10 ) || 5000;
 			var minAttendees = parseInt( document.getElementById( 'rsvp-loadgen-min-attendees' ).value, 10 ) || 1;
 			var maxAttendees = parseInt( document.getElementById( 'rsvp-loadgen-max-attendees' ).value, 10 ) || 20;
+			var withVenues = withVenuesEl && withVenuesEl.checked ? 1 : 0;
+			var withOrganizers = withOrganizersEl && withOrganizersEl.checked ? 1 : 0;
 
 			generateBtn.disabled = true;
 			cleanupBtn.disabled = true;
@@ -288,7 +310,7 @@
 			setSpinner( generateSpinner, true );
 			setNotice( generateNoticeEl, 'info', '' );
 
-			runGenerateLoop( total, minAttendees, maxAttendees ).finally( function () {
+			runGenerateLoop( total, minAttendees, maxAttendees, withVenues, withOrganizers ).finally( function () {
 				generateBtn.disabled = false;
 				cleanupBtn.disabled = false;
 				if ( scenarioBtn ) {
@@ -435,6 +457,59 @@
 				RSVPLoadgen.actions.revertMigration,
 				'Revert the rsvp-to-tc migration back to legacy V1 RSVP data?'
 			);
+		} );
+	}
+
+	function runAddonAction( button, spinner, action, params, successMessage ) {
+		button.disabled = true;
+		setSpinner( spinner, true );
+		setNotice( addonNoticeEl, 'info', '' );
+
+		postAjax( action, params ).then( function ( res ) {
+			button.disabled = false;
+			setSpinner( spinner, false );
+
+			if ( ! res || ! res.success ) {
+				var message = ( res && res.data && res.data.message ) || 'Error. See console/logs for details.';
+				setNotice( addonNoticeEl, 'error', message );
+				return;
+			}
+
+			setNotice( addonNoticeEl, 'success', successMessage( res.data ) );
+			refreshCounts();
+		} );
+	}
+
+	if ( addRsvpBtn ) {
+		addRsvpBtn.addEventListener( 'click', function () {
+			var eventId = parseInt( document.getElementById( 'rsvp-loadgen-addrsvp-event-id' ).value, 10 ) || 0;
+			var quantity = parseInt( document.getElementById( 'rsvp-loadgen-addrsvp-quantity' ).value, 10 ) || 1;
+
+			runAddonAction( addRsvpBtn, addRsvpSpinner, RSVPLoadgen.actions.addRsvp, { event_id: eventId, quantity: quantity }, function ( data ) {
+				return 'Added ' + data.created + ' RSVP ticket(s) to event ' + eventId + ' (run: ' + data.run_id + ').';
+			} );
+		} );
+	}
+
+	if ( addTicketsBtn ) {
+		addTicketsBtn.addEventListener( 'click', function () {
+			var eventId = parseInt( document.getElementById( 'rsvp-loadgen-addtickets-event-id' ).value, 10 ) || 0;
+			var quantity = parseInt( document.getElementById( 'rsvp-loadgen-addtickets-quantity' ).value, 10 ) || 1;
+
+			runAddonAction( addTicketsBtn, addTicketsSpinner, RSVPLoadgen.actions.addTickets, { event_id: eventId, quantity: quantity }, function ( data ) {
+				return 'Added ' + data.created + ' paid ticket(s) to event ' + eventId + ' (run: ' + data.run_id + ').';
+			} );
+		} );
+	}
+
+	if ( addAttendeesBtn ) {
+		addAttendeesBtn.addEventListener( 'click', function () {
+			var ticketId = parseInt( document.getElementById( 'rsvp-loadgen-addattendees-ticket-id' ).value, 10 ) || 0;
+			var quantity = parseInt( document.getElementById( 'rsvp-loadgen-addattendees-quantity' ).value, 10 ) || 1;
+
+			runAddonAction( addAttendeesBtn, addAttendeesSpinner, RSVPLoadgen.actions.addAttendees, { ticket_id: ticketId, quantity: quantity }, function ( data ) {
+				return 'Added ' + data.created + ' attendee(s) to ticket ' + ticketId + ' (run: ' + data.run_id + ').';
+			} );
 		} );
 	}
 } )();

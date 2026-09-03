@@ -24,6 +24,10 @@ class Ajax {
 	const ACTION_REVERT_MIGRATION   = 'rsvp_loadgen_revert_migration';
 	const ACTION_MIGRATION_STATUS   = 'rsvp_loadgen_migration_status';
 
+	const ACTION_ADD_RSVP      = 'rsvp_loadgen_add_rsvp_batch';
+	const ACTION_ADD_TICKETS   = 'rsvp_loadgen_add_tickets_batch';
+	const ACTION_ADD_ATTENDEES = 'rsvp_loadgen_add_attendees_batch';
+
 	const TRANSIENT_PREFIX = 'rsvp_loadgen_run_';
 	const MAX_CHUNK_SIZE   = 100;
 
@@ -36,6 +40,9 @@ class Ajax {
 		add_action( 'wp_ajax_' . self::ACTION_RUN_MIGRATION, [ $this, 'handle_run_migration' ] );
 		add_action( 'wp_ajax_' . self::ACTION_REVERT_MIGRATION, [ $this, 'handle_revert_migration' ] );
 		add_action( 'wp_ajax_' . self::ACTION_MIGRATION_STATUS, [ $this, 'handle_migration_status' ] );
+		add_action( 'wp_ajax_' . self::ACTION_ADD_RSVP, [ $this, 'handle_add_rsvp' ] );
+		add_action( 'wp_ajax_' . self::ACTION_ADD_TICKETS, [ $this, 'handle_add_tickets' ] );
+		add_action( 'wp_ajax_' . self::ACTION_ADD_ATTENDEES, [ $this, 'handle_add_attendees' ] );
 	}
 
 	public function handle_generate(): void {
@@ -52,10 +59,12 @@ class Ajax {
 		if ( ! is_array( $state ) ) {
 			$run_id = Data::new_run_id();
 			$state  = [
-				'total'         => $total,
-				'done'          => 0,
-				'min_attendees' => $min_attendees,
-				'max_attendees' => $max_attendees,
+				'total'           => $total,
+				'done'            => 0,
+				'min_attendees'   => $min_attendees,
+				'max_attendees'   => $max_attendees,
+				'with_venues'     => ! empty( $_POST['with_venues'] ),
+				'with_organizers' => ! empty( $_POST['with_organizers'] ),
 			];
 		}
 
@@ -65,8 +74,10 @@ class Ajax {
 		if ( $this_run > 0 ) {
 			$generator = new Generator( $run_id );
 			$generator->generate_batch( $this_run, $state['done'], [
-				'min_attendees' => $state['min_attendees'],
-				'max_attendees' => $state['max_attendees'],
+				'min_attendees'   => $state['min_attendees'],
+				'max_attendees'   => $state['max_attendees'],
+				'with_venues'     => $state['with_venues'],
+				'with_organizers' => $state['with_organizers'],
 			] );
 
 			$state['done'] += $this_run;
@@ -94,7 +105,13 @@ class Ajax {
 		$min_attendees = max( 1, (int) ( $_POST['min_attendees'] ?? 1 ) );
 		$max_attendees = max( $min_attendees, (int) ( $_POST['max_attendees'] ?? 20 ) );
 
-		$result = ( new Scenario_Job() )->start( $type, $min_attendees, $max_attendees );
+		$result = ( new Scenario_Job() )->start(
+			$type,
+			$min_attendees,
+			$max_attendees,
+			! empty( $_POST['with_venues'] ),
+			! empty( $_POST['with_organizers'] )
+		);
 
 		if ( ! $result['success'] ) {
 			wp_send_json_error( $result );
@@ -201,6 +218,61 @@ class Ajax {
 			'can_run'   => $migration->can_run(),
 			'can_revert' => $migration->can_revert(),
 		] );
+	}
+
+	public function handle_add_rsvp(): void {
+		$this->verify_request();
+
+		$event_id = (int) ( $_POST['event_id'] ?? 0 );
+		$quantity = min( self::MAX_CHUNK_SIZE, max( 1, (int) ( $_POST['quantity'] ?? 1 ) ) );
+
+		if ( ! $event_id || ! get_post( $event_id ) ) {
+			wp_send_json_error( [ 'message' => __( 'Invalid Event ID.', 'rsvp-migration-loadgen' ) ] );
+		}
+
+		$run_id     = Data::new_run_id();
+		$generator  = new Generator( $run_id );
+		$ticket_ids = $generator->add_rsvp_tickets( $event_id, $quantity );
+
+		wp_send_json_success( [ 'created' => count( $ticket_ids ), 'run_id' => $run_id ] );
+	}
+
+	public function handle_add_tickets(): void {
+		$this->verify_request();
+
+		$event_id = (int) ( $_POST['event_id'] ?? 0 );
+		$quantity = min( self::MAX_CHUNK_SIZE, max( 1, (int) ( $_POST['quantity'] ?? 1 ) ) );
+
+		if ( ! $event_id || ! get_post( $event_id ) ) {
+			wp_send_json_error( [ 'message' => __( 'Invalid Event ID.', 'rsvp-migration-loadgen' ) ] );
+		}
+
+		$run_id     = Data::new_run_id();
+		$generator  = new Generator( $run_id );
+		$ticket_ids = $generator->add_paid_tickets( $event_id, $quantity );
+
+		if ( ! $ticket_ids ) {
+			wp_send_json_error( [ 'message' => __( "0 tickets added — this event's ticket provider is RSVP, not a paid provider.", 'rsvp-migration-loadgen' ) ] );
+		}
+
+		wp_send_json_success( [ 'created' => count( $ticket_ids ), 'run_id' => $run_id ] );
+	}
+
+	public function handle_add_attendees(): void {
+		$this->verify_request();
+
+		$ticket_id = (int) ( $_POST['ticket_id'] ?? 0 );
+		$quantity  = min( self::MAX_CHUNK_SIZE, max( 1, (int) ( $_POST['quantity'] ?? 1 ) ) );
+
+		if ( ! $ticket_id || ! get_post( $ticket_id ) ) {
+			wp_send_json_error( [ 'message' => __( 'Invalid Ticket ID.', 'rsvp-migration-loadgen' ) ] );
+		}
+
+		$run_id       = Data::new_run_id();
+		$generator    = new Generator( $run_id );
+		$attendee_ids = $generator->add_attendees( $ticket_id, $quantity );
+
+		wp_send_json_success( [ 'created' => count( $attendee_ids ), 'run_id' => $run_id ] );
 	}
 
 	private function verify_request(): void {

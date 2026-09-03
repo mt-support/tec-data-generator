@@ -57,6 +57,9 @@ class Admin {
 				'runMigration'     => Ajax::ACTION_RUN_MIGRATION,
 				'revertMigration'  => Ajax::ACTION_REVERT_MIGRATION,
 				'migrationStatus'  => Ajax::ACTION_MIGRATION_STATUS,
+				'addRsvp'          => Ajax::ACTION_ADD_RSVP,
+				'addTickets'       => Ajax::ACTION_ADD_TICKETS,
+				'addAttendees'     => Ajax::ACTION_ADD_ATTENDEES,
 			],
 		] );
 	}
