@@ -36,10 +36,17 @@ class CLI {
 	 * default: 100
 	 * ---
 	 *
+	 * [--with-venues]
+	 * : Attach a random generated Venue to each Event unit.
+	 *
+	 * [--with-organizers]
+	 * : Attach a random generated Organizer to each Event unit.
+	 *
 	 * ## EXAMPLES
 	 *
 	 *     wp rsvp-loadgen generate --count=5000
 	 *     wp rsvp-loadgen generate --count=200 --min-attendees=5 --max-attendees=50
+	 *     wp rsvp-loadgen generate --count=30 --with-venues --with-organizers
 	 *
 	 * @when after_wp_load
 	 */
@@ -54,8 +61,10 @@ class CLI {
 		$run_id    = Data::new_run_id();
 		$generator = new Generator( $run_id );
 		$options   = [
-			'min_attendees' => $min_attendees,
-			'max_attendees' => $max_attendees,
+			'min_attendees'   => $min_attendees,
+			'max_attendees'   => $max_attendees,
+			'with_venues'     => isset( $assoc_args['with-venues'] ),
+			'with_organizers' => isset( $assoc_args['with-organizers'] ),
 		];
 
 		\WP_CLI::log( "Starting generation of {$count} units (run: {$run_id})..." );
@@ -113,10 +122,17 @@ class CLI {
 	 * default: 100
 	 * ---
 	 *
+	 * [--with-venues]
+	 * : Attach a random generated Venue to each Event unit.
+	 *
+	 * [--with-organizers]
+	 * : Attach a random generated Organizer to each Event unit.
+	 *
 	 * ## EXAMPLES
 	 *
 	 *     wp rsvp-loadgen scenario --type=usual
 	 *     wp rsvp-loadgen scenario --type=edge --batch-size=250
+	 *     wp rsvp-loadgen scenario --type=usual --with-venues --with-organizers
 	 *
 	 * @when after_wp_load
 	 */
@@ -150,6 +166,8 @@ class CLI {
 			'max_attendees'      => $max_attendees,
 			'min_rsvps_per_unit' => $preset['rsvps_min'],
 			'max_rsvps_per_unit' => $preset['rsvps_max'],
+			'with_venues'        => isset( $assoc_args['with-venues'] ),
+			'with_organizers'    => isset( $assoc_args['with-organizers'] ),
 		];
 
 		\WP_CLI::log( "Generating {$unit_count} units (run: {$run_id})..." );
