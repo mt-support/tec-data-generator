@@ -22,6 +22,11 @@
 	font-size: 13px;
 }
 
+.rsvp-loadgen-section {
+	border-top: 2px solid #e5e5e5;
+	margin-bottom: 24px;
+}
+
 /* WP admin's own `.spinner` is loaded by wp-admin core, we just align it next to a button. */
 .rsvp-loadgen-spinner {
 	float: none;
