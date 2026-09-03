@@ -19,6 +19,16 @@ class Generator {
 	 */
 	private $options = [];
 
+	/**
+	 * @var int[]
+	 */
+	private $venue_pool = [];
+
+	/**
+	 * @var int[]
+	 */
+	private $organizer_pool = [];
+
 	public function __construct( string $run_id ) {
 		$this->run_id = $run_id;
 	}
@@ -34,6 +44,8 @@ class Generator {
 	 *     @type int $max_attendees      Maximum attendees per ticket. Default 20.
 	 *     @type int $min_rsvps_per_unit Minimum RSVP tickets per post. Default 1.
 	 *     @type int $max_rsvps_per_unit Maximum RSVP tickets per post. Default 1.
+	 *     @type bool $with_venues        Attach a random generated Venue to each Event unit. Default false.
+	 *     @type bool $with_organizers    Attach a random generated Organizer to each Event unit. Default false.
 	 * }
 	 *
 	 * @return array{created:int,post_ids:int[],ticket_ids:int[],attendee_ids:int[]}
@@ -51,7 +63,7 @@ class Generator {
 				$post_type = $this->post_type_for_sequence( $seq );
 
 				$post_id = 'tribe_events' === $post_type
-					? $this->create_event_post( $seq )
+					? $this->create_event_post( $seq, $this->pick_venue(), $this->pick_organizer() )
 					: $this->create_page_or_post( $post_type, $seq );
 
 				if ( ! $post_id ) {
@@ -98,10 +110,10 @@ class Generator {
 	}
 
 	/**
-	 * Creates a `tribe_events` post via the-events-calendar's own repository ORM, so it
-	 * has valid start/end dates and behaves like a real event on the front end.
+	 * Creates a `tribe_events` post via the-events-calendar's own repository ORM, so it has valid
+	 * start/end dates and behaves like a real event on the front end.
 	 */
-	private function create_event_post( int $seq ): int {
+	private function create_event_post( int $seq, int $venue_id = 0, int $organizer_id = 0 ): int {
 		if ( ! function_exists( 'tribe_events' ) ) {
 			return 0;
 		}
@@ -109,12 +121,27 @@ class Generator {
 		$start = ( new \DateTimeImmutable( 'now', wp_timezone() ) )->modify( "+{$seq} hours" );
 		$end   = $start->modify( '+2 hours' );
 
-		$event = tribe_events()->set_args( [
-			'title'      => "Loadgen Event {$seq}",
+		$organizer_name = $organizer_id ? get_the_title( $organizer_id ) : '';
+		$venue_name     = $venue_id ? get_the_title( $venue_id ) : '';
+		$venue_city     = $venue_id ? (string) get_post_meta( $venue_id, '_VenueCity', true ) : '';
+
+		$args = [
+			'title'      => Data::random_event_title() . " (#{$seq})",
 			'status'     => 'publish',
 			'start_date' => $start->format( 'Y-m-d H:i:s' ),
 			'end_date'   => $end->format( 'Y-m-d H:i:s' ),
-		] )->create();
+			'content'    => Data::random_event_description( $organizer_name, $venue_name, $venue_city ),
+		];
+
+		if ( $venue_id ) {
+			$args['venue'] = $venue_id;
+		}
+
+		if ( $organizer_id ) {
+			$args['organizer'] = $organizer_id;
+		}
+
+		$event = tribe_events()->set_args( $args )->create();
 
 		$post_id = $event instanceof \WP_Post ? $event->ID : 0;
 
@@ -202,6 +229,50 @@ class Generator {
 		}
 
 		return $post_id;
+	}
+
+	/**
+	 * Lazily creates a small pool of Venues (once per run) and returns a random one from it, or 0
+	 * if `with_venues` wasn't requested for this run.
+	 */
+	private function pick_venue(): int {
+		if ( empty( $this->options['with_venues'] ) ) {
+			return 0;
+		}
+
+		if ( empty( $this->venue_pool ) ) {
+			for ( $i = 0; $i < 5; $i++ ) {
+				$id = $this->create_venue( $i );
+
+				if ( $id ) {
+					$this->venue_pool[] = $id;
+				}
+			}
+		}
+
+		return $this->venue_pool ? $this->venue_pool[ array_rand( $this->venue_pool ) ] : 0;
+	}
+
+	/**
+	 * Lazily creates a small pool of Organizers (once per run) and returns a random one from it,
+	 * or 0 if `with_organizers` wasn't requested for this run.
+	 */
+	private function pick_organizer(): int {
+		if ( empty( $this->options['with_organizers'] ) ) {
+			return 0;
+		}
+
+		if ( empty( $this->organizer_pool ) ) {
+			for ( $i = 0; $i < 5; $i++ ) {
+				$id = $this->create_organizer( $i );
+
+				if ( $id ) {
+					$this->organizer_pool[] = $id;
+				}
+			}
+		}
+
+		return $this->organizer_pool ? $this->organizer_pool[ array_rand( $this->organizer_pool ) ] : 0;
 	}
 
 	/**
