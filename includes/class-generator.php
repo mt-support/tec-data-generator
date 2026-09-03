@@ -146,6 +146,65 @@ class Generator {
 	}
 
 	/**
+	 * Creates a `tribe_venues` post via The Events Calendar's own repository ORM.
+	 */
+	private function create_venue( int $seq ): int {
+		if ( ! function_exists( 'tribe_venues' ) ) {
+			return 0;
+		}
+
+		$venue = Data::random_venue();
+
+		$post = tribe_venues()->set_args( [
+			'venue'        => $venue['name'],
+			'address'      => $venue['address'],
+			'city'         => $venue['city'],
+			'state'        => $venue['state'],
+			'country'      => $venue['country'],
+			'phone'        => $venue['phone'],
+			'website'      => $venue['website'],
+			'post_content' => $venue['description'],
+			'post_status'  => 'publish',
+		] )->create();
+
+		$post_id = $post instanceof \WP_Post ? $post->ID : 0;
+
+		if ( $post_id ) {
+			$this->tag_generated( $post_id, 'venue' );
+		}
+
+		return $post_id;
+	}
+
+	/**
+	 * Creates a `tribe_organizer` post via The Events Calendar's own repository ORM.
+	 */
+	private function create_organizer( int $seq ): int {
+		if ( ! function_exists( 'tribe_organizers' ) ) {
+			return 0;
+		}
+
+		$organizer = Data::random_organizer();
+
+		$post = tribe_organizers()->set_args( [
+			'organizer'    => $organizer['name'],
+			'phone'        => $organizer['phone'],
+			'website'      => $organizer['website'],
+			'email'        => $organizer['email'],
+			'post_content' => $organizer['bio'],
+			'post_status'  => 'publish',
+		] )->create();
+
+		$post_id = $post instanceof \WP_Post ? $post->ID : 0;
+
+		if ( $post_id ) {
+			$this->tag_generated( $post_id, 'organizer' );
+		}
+
+		return $post_id;
+	}
+
+	/**
 	 * Creates a legacy V1 RSVP ticket via the real production code path
 	 * (`Tribe__Tickets__Tickets::ticket_add()` → `Tribe__Tickets__RSVP::save_ticket()`),
 	 * so generated tickets are indistinguishable from real user-created ones.
