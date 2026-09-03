@@ -1,8 +1,8 @@
 <?php
 /**
  * Plugin Name: RSVP Migration Load Generator
- * Description: Generates bulk legacy V1 RSVP test data (events/pages/posts + RSVP tickets + attendees) to stress-test the rsvp-to-tc migration. QA tool only - not for production use.
- * Version: 1.0.0
+ * Description: Generates bulk legacy V1 RSVP test data to stress-test the rsvp-to-tc migration.
+ * Version: 1.1.0
  * Author: Victor Larodiel
  * Requires Plugins: event-tickets, the-events-calendar
  * Requires PHP: 7.4
@@ -13,7 +13,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 define( 'RSVP_LOADGEN_FILE', __FILE__ );
-define( 'RSVP_LOADGEN_VERSION', '1.0.0' );
+define( 'RSVP_LOADGEN_VERSION', '1.1.0' );
 
 require_once __DIR__ . '/includes/class-data.php';
 require_once __DIR__ . '/includes/class-generator.php';
