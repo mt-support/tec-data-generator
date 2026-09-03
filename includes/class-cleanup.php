@@ -40,7 +40,11 @@ class Cleanup {
 		}
 
 		if ( $removed < $limit ) {
-			$ids = $this->query_ids( 'any', $limit - $removed, $run_id, self::POST_TYPES_IN_DELETE_ORDER );
+			// WP_Query's post_type => 'any' silently excludes post types registered with
+			// exclude_from_search = true (e.g. ticket CPTs like tec_tc_ticket) — enumerate every
+			// registered post type explicitly instead, so paid tickets of any provider are found.
+			$catch_all_types = array_values( array_diff( get_post_types( [], 'names' ), self::POST_TYPES_IN_DELETE_ORDER ) );
+			$ids             = $this->query_ids( $catch_all_types, $limit - $removed, $run_id );
 
 			foreach ( $ids as $id ) {
 				if ( wp_delete_post( $id, true ) ) {
@@ -92,7 +96,11 @@ class Cleanup {
 			$total += $this->count_type( $post_type, $run_id );
 		}
 
-		$total += $this->count_type( 'any', $run_id, self::POST_TYPES_IN_DELETE_ORDER );
+		// WP_Query's post_type => 'any' silently excludes post types registered with
+		// exclude_from_search = true (e.g. ticket CPTs like tec_tc_ticket) — enumerate every
+		// registered post type explicitly instead, so paid tickets of any provider are counted.
+		$catch_all_types = array_values( array_diff( get_post_types( [], 'names' ), self::POST_TYPES_IN_DELETE_ORDER ) );
+		$total          += $this->count_type( $catch_all_types, $run_id );
 
 		return $total;
 	}
@@ -123,13 +131,12 @@ class Cleanup {
 	}
 
 	/**
-	 * @param string[] $exclude_post_types When $post_type is 'any', post types to exclude (the
-	 *                                     ones already covered by their own explicit pass).
+	 * @param string|string[] $post_type
 	 *
 	 * @return int[] Post IDs.
 	 */
-	private function query_ids( string $post_type, int $limit, ?string $run_id, array $exclude_post_types = [] ): array {
-		$args = [
+	private function query_ids( $post_type, int $limit, ?string $run_id ): array {
+		return get_posts( [
 			'post_type'        => $post_type,
 			'post_status'      => 'any',
 			'posts_per_page'   => $limit,
@@ -139,32 +146,21 @@ class Cleanup {
 			'order'            => 'ASC',
 			'no_found_rows'    => true,
 			'suppress_filters' => true,
-		];
-
-		if ( $exclude_post_types ) {
-			// `$post_type` is already 'any' for the catch-all pass; this just narrows it to
-			// "any post type except the ones already covered by their own explicit pass above".
-			$args['post_type__not_in'] = $exclude_post_types;
-		}
-
-		return get_posts( $args );
+		] );
 	}
 
-	private function count_type( string $post_type, ?string $run_id, array $exclude_post_types = [] ): int {
-		$args = [
+	/**
+	 * @param string|string[] $post_type
+	 */
+	private function count_type( $post_type, ?string $run_id ): int {
+		$query = new \WP_Query( [
 			'post_type'        => $post_type,
 			'post_status'      => 'any',
 			'posts_per_page'   => 1,
 			'fields'           => 'ids',
 			'meta_query'       => $this->meta_query( $run_id ),
 			'suppress_filters' => true,
-		];
-
-		if ( $exclude_post_types ) {
-			$args['post_type__not_in'] = $exclude_post_types;
-		}
-
-		$query = new \WP_Query( $args );
+		] );
 
 		return (int) $query->found_posts;
 	}
