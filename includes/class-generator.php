@@ -222,6 +222,57 @@ class Generator {
 	}
 
 	/**
+	 * Adds attendees to an existing ticket (RSVP or paid) — backs the standalone `add-attendees`
+	 * CLI/AJAX command. Branches by ticket post type because `Tribe__Tickets__RSVP` does not
+	 * override the base `create_attendee()` method: the generic `tribe( 'tickets.attendees' )`
+	 * dispatcher would route an RSVP ticket through a different, ORM-based code path than
+	 * `Tribe__Tickets__RSVP::create_attendee_for_ticket()` — calling the RSVP method directly is
+	 * the only way to guarantee the V1 meta shape this plugin depends on.
+	 *
+	 * @return int[] Created attendee IDs.
+	 */
+	public function add_attendees( int $ticket_id, int $quantity ): array {
+		$attendee_ids = [];
+		$ticket_post  = get_post( $ticket_id );
+
+		if ( ! $ticket_post ) {
+			return [];
+		}
+
+		$is_rsvp = 'tribe_rsvp_tickets' === $ticket_post->post_type;
+
+		for ( $i = 0; $i < $quantity; $i++ ) {
+			[ $full_name, $email ] = Data::random_person( $ticket_id, $i );
+			$data = [
+				'full_name' => $full_name,
+				'email'     => $email,
+			];
+
+			$attendee_id = 0;
+
+			try {
+				if ( $is_rsvp ) {
+					$attendee_id = (int) tribe( 'tickets.rsvp' )->create_attendee_for_ticket( $ticket_post, $data );
+				} else {
+					$attendee = tribe( 'tickets.attendees' )->create_attendee( $ticket_id, $data );
+					$attendee_id = $attendee instanceof \WP_Post ? $attendee->ID : 0;
+				}
+			} catch ( \Exception $e ) {
+				continue;
+			}
+
+			if ( ! $attendee_id ) {
+				continue;
+			}
+
+			$this->tag_generated( $attendee_id, 'attendee' );
+			$attendee_ids[] = $attendee_id;
+		}
+
+		return $attendee_ids;
+	}
+
+	/**
 	 * Round-robins post types by global sequence, guaranteeing an even 3-way split
 	 * regardless of how many chunked calls it takes to reach the total count.
 	 */
