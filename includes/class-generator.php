@@ -405,12 +405,17 @@ class Generator {
 	}
 
 	/**
-	 * Lazily creates a small pool of Venues (once per run) and returns a random one from it, or 0
-	 * if `with_venues` wasn't requested for this run.
+	 * Lazily creates a small pool of Venues (once per run — reusing any this run already created
+	 * on an earlier chunk, since the caller may construct a fresh Generator instance per chunk) and
+	 * returns a random one from it, or 0 if `with_venues` wasn't requested for this run.
 	 */
 	private function pick_venue(): int {
 		if ( empty( $this->options['with_venues'] ) ) {
 			return 0;
+		}
+
+		if ( empty( $this->venue_pool ) ) {
+			$this->venue_pool = $this->find_run_posts( 'tribe_venue' );
 		}
 
 		if ( empty( $this->venue_pool ) ) {
@@ -427,12 +432,17 @@ class Generator {
 	}
 
 	/**
-	 * Lazily creates a small pool of Organizers (once per run) and returns a random one from it,
-	 * or 0 if `with_organizers` wasn't requested for this run.
+	 * Lazily creates a small pool of Organizers (once per run — reusing any this run already
+	 * created on an earlier chunk) and returns a random one from it, or 0 if `with_organizers`
+	 * wasn't requested for this run.
 	 */
 	private function pick_organizer(): int {
 		if ( empty( $this->options['with_organizers'] ) ) {
 			return 0;
+		}
+
+		if ( empty( $this->organizer_pool ) ) {
+			$this->organizer_pool = $this->find_run_posts( 'tribe_organizer' );
 		}
 
 		if ( empty( $this->organizer_pool ) ) {
@@ -446,6 +456,30 @@ class Generator {
 		}
 
 		return $this->organizer_pool ? $this->organizer_pool[ array_rand( $this->organizer_pool ) ] : 0;
+	}
+
+	/**
+	 * Finds posts of the given type already tagged with this Generator instance's run ID —
+	 * used to let a pool (venues/organizers) persist across multiple Generator instances that
+	 * share the same run, e.g. one per chunked AJAX/background-job request.
+	 *
+	 * @return int[]
+	 */
+	private function find_run_posts( string $post_type ): array {
+		return get_posts( [
+			'post_type'        => $post_type,
+			'post_status'      => 'any',
+			'posts_per_page'   => -1,
+			'fields'           => 'ids',
+			'meta_query'       => [
+				[
+					'key'   => Data::RUN_ID_META_KEY,
+					'value' => $this->run_id,
+				],
+			],
+			'no_found_rows'    => true,
+			'suppress_filters' => true,
+		] );
 	}
 
 	/**

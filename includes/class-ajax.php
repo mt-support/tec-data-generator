@@ -76,8 +76,8 @@ class Ajax {
 			$generator->generate_batch( $this_run, $state['done'], [
 				'min_attendees'   => $state['min_attendees'],
 				'max_attendees'   => $state['max_attendees'],
-				'with_venues'     => $state['with_venues'],
-				'with_organizers' => $state['with_organizers'],
+				'with_venues'     => $state['with_venues'] ?? false,
+				'with_organizers' => $state['with_organizers'] ?? false,
 			] );
 
 			$state['done'] += $this_run;

@@ -125,8 +125,8 @@ class Scenario_Job {
 					'max_attendees'      => $job['max_attendees'],
 					'min_rsvps_per_unit' => $job['min_rsvps'],
 					'max_rsvps_per_unit' => $job['max_rsvps'],
-					'with_venues'        => $job['with_venues'],
-					'with_organizers'    => $job['with_organizers'],
+					'with_venues'        => $job['with_venues'] ?? false,
+					'with_organizers'    => $job['with_organizers'] ?? false,
 				] );
 
 				$job['post_ids']       = array_merge( $job['post_ids'], $result['post_ids'] );
