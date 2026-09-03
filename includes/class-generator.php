@@ -9,6 +9,8 @@ namespace RSVP_Loadgen;
 
 class Generator {
 
+	const PAID_TICKET_TYPES = [ 'Standard', 'General', 'Basic', 'Student', 'Early Bird', 'VIP', 'Platinum' ];
+
 	/**
 	 * @var string
 	 */
@@ -145,6 +147,76 @@ class Generator {
 		}
 
 		$this->tag_generated( (int) $ticket_id, 'ticket' );
+
+		return (int) $ticket_id;
+	}
+
+	/**
+	 * Adds paid tickets (via whatever provider the event already uses — Tickets Commerce, PayPal,
+	 * etc.) to an existing event. This is the one deliberate exception to this plugin's "V1 RSVP
+	 * shape only" default: it exists solely for this standalone command, `generate`/`scenario`
+	 * never call it.
+	 *
+	 * @param array{capacity?:int,stock?:int,unlimited_capacity?:bool,shared_capacity?:bool} $options
+	 *
+	 * @return int[] Created ticket IDs. Empty if the event's ticket provider is RSVP.
+	 */
+	public function add_paid_tickets( int $event_id, int $quantity, array $options = [] ): array {
+		$provider = \Tribe__Tickets__Tickets::get_event_ticket_provider( $event_id );
+
+		if ( is_string( $provider ) ) {
+			$provider = new $provider();
+		}
+
+		if ( ! $provider || \Tribe__Tickets__RSVP::class === get_class( $provider ) ) {
+			return [];
+		}
+
+		$ticket_ids = [];
+
+		for ( $i = 0; $i < $quantity; $i++ ) {
+			$ticket_id = $this->create_paid_ticket( $provider, $event_id, $options );
+
+			if ( $ticket_id ) {
+				$ticket_ids[] = $ticket_id;
+			}
+		}
+
+		return $ticket_ids;
+	}
+
+	private function create_paid_ticket( $provider, int $event_id, array $options ): int {
+		$type  = self::PAID_TICKET_TYPES[ array_rand( self::PAID_TICKET_TYPES ) ];
+		$price = wp_rand( 10, 150 );
+
+		$unlimited = ! empty( $options['unlimited_capacity'] );
+		$capacity  = $unlimited ? '' : ( $options['capacity'] ?? wp_rand( 20, 200 ) );
+		$stock     = $unlimited ? '' : ( $options['stock'] ?? $capacity );
+
+		$stock_data = [
+			'capacity' => $capacity,
+			'stock'    => $stock,
+		];
+
+		if ( ! empty( $options['shared_capacity'] ) ) {
+			$stock_data['mode'] = \Tribe__Tickets__Global_Stock::GLOBAL_STOCK_MODE;
+		}
+
+		$data = [
+			'ticket_name'             => "{$type} Ticket",
+			'ticket_price'            => $price,
+			'ticket_description'      => "Generated {$type} ticket added to existing event.",
+			'ticket_show_description' => 1,
+			'tribe-ticket'            => $stock_data,
+		];
+
+		$ticket_id = $provider->ticket_add( $event_id, $data );
+
+		if ( ! $ticket_id ) {
+			return 0;
+		}
+
+		$this->tag_generated( (int) $ticket_id, 'paid_ticket' );
 
 		return (int) $ticket_id;
 	}
