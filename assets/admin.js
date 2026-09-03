@@ -466,9 +466,6 @@
 		setNotice( addonNoticeEl, 'info', '' );
 
 		postAjax( action, params ).then( function ( res ) {
-			button.disabled = false;
-			setSpinner( spinner, false );
-
 			if ( ! res || ! res.success ) {
 				var message = ( res && res.data && res.data.message ) || 'Error. See console/logs for details.';
 				setNotice( addonNoticeEl, 'error', message );
@@ -477,6 +474,9 @@
 
 			setNotice( addonNoticeEl, 'success', successMessage( res.data ) );
 			refreshCounts();
+		} ).finally( function () {
+			button.disabled = false;
+			setSpinner( spinner, false );
 		} );
 	}
 

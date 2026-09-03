@@ -252,7 +252,7 @@ class Ajax {
 		$ticket_ids = $generator->add_paid_tickets( $event_id, $quantity );
 
 		if ( ! $ticket_ids ) {
-			wp_send_json_error( [ 'message' => __( "0 tickets added — this event's ticket provider is RSVP, not a paid provider.", 'rsvp-migration-loadgen' ) ] );
+			wp_send_json_error( [ 'message' => __( "0 tickets added — either this event's ticket provider is RSVP (paid tickets don't apply), or ticket creation failed. Check the site error log if you expected a paid provider here.", 'rsvp-migration-loadgen' ) ] );
 		}
 
 		wp_send_json_success( [ 'created' => count( $ticket_ids ), 'run_id' => $run_id ] );
