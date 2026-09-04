@@ -60,6 +60,7 @@ class Admin {
 				'generateTickets'  => Ajax::ACTION_GENERATE_TICKETS,
 				'scheduleScenario' => Ajax::ACTION_SCHEDULE_SCENARIO,
 				'scenarioStatus'   => Ajax::ACTION_SCENARIO_STATUS,
+				'cancelScenario'   => Ajax::ACTION_CANCEL_SCENARIO,
 				'cleanup'          => Ajax::ACTION_CLEANUP,
 				'status'           => Ajax::ACTION_STATUS,
 				'runMigration'     => Ajax::ACTION_RUN_MIGRATION,
@@ -85,6 +86,8 @@ class Admin {
 			'has_events_pro'    => Plugin_Availability::has_events_pro_or_ecp(),
 			'has_ecp'           => Plugin_Availability::has_ecp(),
 		];
+
+		$plugin_statuses = Plugin_Availability::get_statuses();
 
 		// The block editor gates ticket blocks on the stored option directly (it never
 		// sees this plugin's runtime tribe_tickets_post_types filter), so warn when

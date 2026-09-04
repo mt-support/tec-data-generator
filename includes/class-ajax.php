@@ -21,6 +21,7 @@ class Ajax {
 
 	const ACTION_SCHEDULE_SCENARIO = 'tec_data_generator_schedule_scenario';
 	const ACTION_SCENARIO_STATUS   = 'tec_data_generator_scenario_status';
+	const ACTION_CANCEL_SCENARIO   = 'tec_data_generator_cancel_scenario';
 
 	const ACTION_RUN_MIGRATION      = 'tec_data_generator_run_migration';
 	const ACTION_REVERT_MIGRATION   = 'tec_data_generator_revert_migration';
@@ -39,6 +40,7 @@ class Ajax {
 		add_action( 'wp_ajax_' . self::ACTION_GENERATE_TICKETS, [ $this, 'handle_generate_tickets' ] );
 		add_action( 'wp_ajax_' . self::ACTION_SCHEDULE_SCENARIO, [ $this, 'handle_schedule_scenario' ] );
 		add_action( 'wp_ajax_' . self::ACTION_SCENARIO_STATUS, [ $this, 'handle_scenario_status' ] );
+		add_action( 'wp_ajax_' . self::ACTION_CANCEL_SCENARIO, [ $this, 'handle_cancel_scenario' ] );
 		add_action( 'wp_ajax_' . self::ACTION_CLEANUP, [ $this, 'handle_cleanup' ] );
 		add_action( 'wp_ajax_' . self::ACTION_STATUS, [ $this, 'handle_status' ] );
 		add_action( 'wp_ajax_' . self::ACTION_RUN_MIGRATION, [ $this, 'handle_run_migration' ] );
@@ -254,6 +256,34 @@ class Ajax {
 		}
 
 		wp_send_json_success( $this->scenario_job_response( $job ) );
+	}
+
+	public function handle_cancel_scenario(): void {
+		$this->verify_request();
+
+		$job = Scenario_Job::get();
+
+		if ( ! $job ) {
+			wp_send_json_success( [ 'success' => true, 'message' => 'No scenario running.' ] );
+			return;
+		}
+
+		// Mark job as canceled and clear it
+		delete_option( Scenario_Job::OPTION_KEY );
+
+		// Cancel all pending Action Scheduler actions for this job
+		if ( function_exists( 'as_unschedule_all_actions' ) ) {
+			as_unschedule_all_actions( Scenario_Job::AS_HOOK, [], Scenario_Job::AS_GROUP );
+		}
+
+		wp_send_json_success( [
+			'success' => true,
+			'message' => sprintf(
+				/* translators: %s: scenario type (usual/edge) */
+				__( 'Scenario "%s" canceled. Pending Action Scheduler tasks cleared.', 'tec-data-generator' ),
+				$job['type']
+			),
+		] );
 	}
 
 	/**

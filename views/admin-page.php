@@ -5,6 +5,7 @@
  * @var array<string,int>       $counts    Current generated-record counts, keyed by kind.
  * @var \TEC\DataGenerator\Migration $migration Wrapper around the rsvp-to-tc migration.
  * @var array<string,bool>      $plugin_availability Which optional dependency plugins are active.
+ * @var array<int,array{name:string,status:string,status_label:string,version:string}> $plugin_statuses Name, status, and version of each related plugin.
  * @var string[]                $missing_ticket_types Page/Post types missing from the stored ticket-enabled list.
  */
 
@@ -33,6 +34,27 @@ if ( ! defined( 'ABSPATH' ) ) {
 		</p>
 	</div>
 	<?php endif; ?>
+	<section class="tec-data-generator-section">
+		<h2><?php esc_html_e( 'Plugin status', 'tec-data-generator' ); ?></h2>
+		<table class="widefat striped" style="max-width: 640px;">
+			<thead>
+				<tr>
+					<th><?php esc_html_e( 'Plugin', 'tec-data-generator' ); ?></th>
+					<th><?php esc_html_e( 'Status', 'tec-data-generator' ); ?></th>
+					<th><?php esc_html_e( 'Version', 'tec-data-generator' ); ?></th>
+				</tr>
+			</thead>
+			<tbody>
+			<?php foreach ( $plugin_statuses as $plugin ) : ?>
+				<tr>
+					<td><?php echo esc_html( $plugin['name'] ); ?></td>
+					<td><?php echo esc_html( $plugin['status_label'] ); ?></td>
+					<td><?php echo '' !== $plugin['version'] ? esc_html( $plugin['version'] ) : '&mdash;'; ?></td>
+				</tr>
+			<?php endforeach; ?>
+			</tbody>
+		</table>
+	</section>
 	<section class="tec-data-generator-section">
 		<h2><?php esc_html_e( 'Currently generated', 'tec-data-generator' ); ?></h2>
 		<table class="widefat striped" style="max-width: 480px;" id="tec-data-generator-counts">
@@ -76,6 +98,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 		<p>
 			<button type="button" class="button button-primary" id="tec-data-generator-scenario-btn">
 				<?php esc_html_e( 'Generate scenario', 'tec-data-generator' ); ?>
+			</button>
+			<button type="button" class="button button-secondary" id="tec-data-generator-scenario-cancel-btn" style="margin-left: 10px;" hidden>
+				<?php esc_html_e( 'Cancel scenario', 'tec-data-generator' ); ?>
 			</button>
 			<span class="spinner tec-data-generator-spinner" id="tec-data-generator-scenario-spinner"></span>
 		</p>
@@ -308,5 +333,60 @@ if ( ! defined( 'ABSPATH' ) ) {
 			<span class="spinner tec-data-generator-spinner" id="tec-data-generator-migration-spinner"></span>
 		</p>
 		<div id="tec-data-generator-migration-notice" class="notice inline tec-data-generator-notice" hidden><p></p></div>
+	</section>
+
+	<section class="tec-data-generator-section">
+		<h2><?php esc_html_e( 'CLI reference', 'tec-data-generator' ); ?></h2>
+		<p>
+			<?php esc_html_e( 'The same operations above, for large runs (1000+) where WP-CLI has no request-timeout ceiling. Migrate/revert only schedule the run — the work happens in the background.', 'tec-data-generator' ); ?>
+		</p>
+		<table class="widefat striped" style="max-width: 640px;">
+			<tbody>
+				<tr>
+					<td><code>wp tec-data-generator generate --count=5000</code></td>
+					<td><?php esc_html_e( 'Generate units (Event/Page/Post + 1 RSVP each)', 'tec-data-generator' ); ?></td>
+				</tr>
+				<tr>
+					<td><code>wp tec-data-generator scenario --type=usual</code></td>
+					<td><?php esc_html_e( 'Realistic QA scenario (25–250 units, some orphaned)', 'tec-data-generator' ); ?></td>
+				</tr>
+				<tr>
+					<td><code>wp tec-data-generator scenario --type=edge</code></td>
+					<td><?php esc_html_e( 'Edge-case scenario (7k–11k units, some orphaned)', 'tec-data-generator' ); ?></td>
+				</tr>
+				<tr>
+					<td><code>wp tec-data-generator generate-events --count=50</code></td>
+					<td><?php esc_html_e( 'Event containers only, no tickets', 'tec-data-generator' ); ?></td>
+				</tr>
+				<tr>
+					<td><code>wp tec-data-generator generate-tickets --count=10</code></td>
+					<td><?php esc_html_e( 'Fresh containers with tickets + attendees', 'tec-data-generator' ); ?></td>
+				</tr>
+				<tr>
+					<td><code>wp tec-data-generator add-rsvp &lt;event_id&gt; --quantity=5</code></td>
+					<td><?php esc_html_e( 'Attach RSVP tickets to an existing event', 'tec-data-generator' ); ?></td>
+				</tr>
+				<tr>
+					<td><code>wp tec-data-generator add-tickets &lt;event_id&gt; --quantity=5</code></td>
+					<td><?php esc_html_e( 'Attach paid tickets to an existing event', 'tec-data-generator' ); ?></td>
+				</tr>
+				<tr>
+					<td><code>wp tec-data-generator add-attendees &lt;ticket_id&gt; --quantity=10</code></td>
+					<td><?php esc_html_e( 'Attach attendees to an existing ticket', 'tec-data-generator' ); ?></td>
+				</tr>
+				<tr>
+					<td><code>wp tec-data-generator migrate</code></td>
+					<td><?php esc_html_e( 'Schedule the rsvp-to-tc migration (full run)', 'tec-data-generator' ); ?></td>
+				</tr>
+				<tr>
+					<td><code>wp tec-data-generator revert</code></td>
+					<td><?php esc_html_e( 'Revert the migration back to V1', 'tec-data-generator' ); ?></td>
+				</tr>
+				<tr>
+					<td><code>wp tec-data-generator cleanup</code></td>
+					<td><?php esc_html_e( 'Delete everything this tool generated', 'tec-data-generator' ); ?></td>
+				</tr>
+			</tbody>
+		</table>
 	</section>
 </div>

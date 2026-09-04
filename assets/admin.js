@@ -27,6 +27,7 @@
 
 	var scenarioTypeSelect = document.getElementById( 'tec-data-generator-scenario-type' );
 	var scenarioBtn = document.getElementById( 'tec-data-generator-scenario-btn' );
+	var scenarioCancelBtn = document.getElementById( 'tec-data-generator-scenario-cancel-btn' );
 	var scenarioSpinner = document.getElementById( 'tec-data-generator-scenario-spinner' );
 	var scenarioProgress = document.getElementById( 'tec-data-generator-scenario-progress' );
 	var scenarioProgressFill = scenarioProgress ? scenarioProgress.querySelector( '.tec-data-generator-progress-fill' ) : null;
@@ -272,6 +273,9 @@
 	function applyScenarioJobState( job ) {
 		if ( ! job || 'idle' === job.status ) {
 			setSpinner( scenarioSpinner, false );
+			if ( scenarioCancelBtn ) {
+				scenarioCancelBtn.hidden = true;
+			}
 			return;
 		}
 
@@ -281,6 +285,10 @@
 			}
 			if ( scenarioTypeSelect ) {
 				scenarioTypeSelect.disabled = true;
+			}
+			if ( scenarioCancelBtn ) {
+				scenarioCancelBtn.hidden = false;
+				scenarioCancelBtn.disabled = false;
 			}
 			setSpinner( scenarioSpinner, true );
 			showScenarioProgress( job.done, job.total, job.done + ' / ' + job.total + ' units generated (scenario: ' + job.type + ')' );
@@ -293,6 +301,9 @@
 		}
 		if ( scenarioTypeSelect ) {
 			scenarioTypeSelect.disabled = false;
+		}
+		if ( scenarioCancelBtn ) {
+			scenarioCancelBtn.hidden = true;
 		}
 
 		if ( 'completed' === job.status ) {
@@ -358,6 +369,35 @@
 
 				applyScenarioJobState( res.data );
 				startScenarioPolling();
+			} );
+		} );
+	}
+
+	if ( scenarioCancelBtn ) {
+		scenarioCancelBtn.addEventListener( 'click', function () {
+			if ( ! confirm( 'Cancel the running scenario and clear pending Action Scheduler tasks?' ) ) {
+				return;
+			}
+
+			scenarioCancelBtn.disabled = true;
+			setSpinner( scenarioSpinner, true );
+			setNotice( scenarioNoticeEl, 'info', 'Canceling...' );
+
+			postAjax( TecDataGenerator.actions.cancelScenario ).then( function ( res ) {
+				scenarioCancelBtn.disabled = false;
+				setSpinner( scenarioSpinner, false );
+
+				if ( res && res.success ) {
+					if ( scenarioPollTimer ) {
+						clearInterval( scenarioPollTimer );
+						scenarioPollTimer = null;
+					}
+					scenarioProgress.hidden = true;
+					setNotice( scenarioNoticeEl, 'warning', res.data.message );
+					refreshCounts();
+				} else {
+					setNotice( scenarioNoticeEl, 'error', 'Error canceling scenario. See console/logs.' );
+				}
 			} );
 		} );
 	}
