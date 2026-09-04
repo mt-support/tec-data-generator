@@ -7,8 +7,8 @@ The user can takes advantage of generate/delete data using skills located [skill
 ## What this plugin is
 
 A standalone QA-only tool, not part of Event Tickets. It exists solely to generate (and clean up) bulk
-test data — Events, Venues, Organizers, legacy V1 RSVP tickets + attendees — so QA can stress-test
-Event Tickets migrations at scale (thousands of tickets/attendees). See `README.md` for usage.
+test data — Events, Venues, Organizers, Event Series, legacy V1 RSVP tickets + attendees — so QA can stress-test
+Event Tickets migrations at scale (thousands of tickets/attendees) and test series functionality. See `README.md` for usage.
 
 It also consolidates generation logic ported from two sibling extensions —
 [`tribe-ext-test-data-generator`](https://github.com/mt-support/tribe-ext-test-data-generator) (Events/Venues/
@@ -43,11 +43,24 @@ add it to the main plugin's Composer/npm setup as out of scope unless the user e
   --ticket-type=paid` and the legacy `generate --ticket-type=paid` flag, which both reuse that same path —
   confined to those paths; don't let paid creation leak anywhere else, and don't "fix" it by making it
   V1-only, that's its whole point.
+- **RSVP ticket/attendee creation must produce V1 shape whether the site's RSVP feature is currently
+  running in V1 or V2 (Tickets Commerce-backed) mode.** Event Tickets 5.x resolves
+  `Tribe__Tickets__RSVP::save_ticket()`/`create_attendee_for_ticket()` through container-bound repositories
+  (`tickets.ticket-repository.rsvp` / `tickets.attendee-repository.rsvp`) rather than a hard-coded post
+  type — on a site that's already run the `rsvp-to-tc` migration (RSVP V2 active), those bindings point at
+  Tickets Commerce repositories, so calling `tribe( 'tickets.rsvp' )->ticket_add()`/`create_attendee_for_ticket()`
+  directly would silently create `tec_tc_ticket` posts instead of `tribe_rsvp_tickets`/`tribe_rsvp_attendees` —
+  invisible to `Cleanup::count_by_type()`/`count_all()`, which only know the V1 post types. `Generator`'s
+  `with_v1_rsvp_repositories()` wraps every such call to temporarily force the V1 repository classes (restoring
+  whatever was bound before), and every current/future call site that touches `tribe( 'tickets.rsvp' )` for
+  ticket or attendee creation must go through it. Verify against a site that has actually completed the
+  `rsvp-to-tc` migration (RSVP V2 active), not just a fresh V1 install — the divergence is invisible on V1.
 - **The `container`/`editor` generation options are presentation-only.** `container` (`mixed`/`event`/`page`)
-  only restricts which container post types `generate_batch()` creates; `editor` (`classic`/`block`) only
-  switches container `post_content` between plain text and Gutenberg markup (tagged via
-  `Data::EDITOR_META_KEY`). Neither may branch ticket creation — tickets always go through the production
-  `ticket_add()` path regardless of editor. Don't invent a "block ticket" storage shape.
+  only restricts which container post types `generate_batch()` creates (note: `generate-events` only accepts
+  `event`, not `page`, since Events have their own post type); `editor` (`classic`/`block`) only switches
+  container `post_content` between plain text and Gutenberg markup (tagged via `Data::EDITOR_META_KEY`).
+  Neither may branch ticket creation — tickets always go through the production `ticket_add()` path
+  regardless of editor. Don't invent a "block ticket" storage shape.
 - **Every post/ticket/attendee created must be tagged** with `TEC\DataGenerator\Data::GENERATED_META_KEY` (and a
   run ID). `Cleanup` relies entirely on this meta to decide what it's allowed to delete — never add a deletion
   path that queries by anything else (e.g. post title prefix, date range), since that risks deleting real site
@@ -124,6 +137,10 @@ wp tec-data-generator generate-events --count=30 --editor=block
 wp tec-data-generator generate-tickets --count=10 --container=event --ticket-type=rsvp
 wp tec-data-generator generate-tickets --event-id=123 --quantity=5
 
+# 1d. ...or generate event series: grouped events with different venues/organizers linked together.
+wp tec-data-generator generate-series --count=5 --events-per-series=3 --with-venues --with-organizers
+wp tec-data-generator generate-series --count=10 --events-per-series=2 --ticket-type=paid
+
 # 2. Migrate it (schedules the full rsvp-to-tc run in the background via Shepherd/Action Scheduler —
 #    this returns immediately, it does NOT wait for the migration to finish).
 wp tec-data-generator migrate
@@ -164,15 +181,15 @@ logic from, not a dependency to require.
 ```
 tec-data-generator.php       # bootstrap: dependency check, hooks, WP-CLI registration
 includes/class-data.php      # marker meta constants + built-in name/email generation
-includes/class-generator.php # creation logic: generate_batch() units, plus add_rsvp_tickets()/add_paid_tickets()/add_attendees() add-ons
+includes/class-generator.php # creation logic: generate_batch() units, generate_series(), plus add_rsvp_tickets()/add_paid_tickets()/add_attendees() add-ons
 includes/class-cleanup.php   # the one place deletion logic lives
 includes/class-migration.php # wraps stellarwp/migrations to run/revert rsvp-to-tc, with status guards
 includes/class-scenario-job.php # background (Action Scheduler) scenario job for the admin page
-includes/class-cli.php       # `wp tec-data-generator generate|scenario|generate-events|generate-tickets|add-rsvp|add-tickets|add-attendees|cleanup|migrate|revert`
+includes/class-cli.php       # `wp tec-data-generator generate|scenario|generate-events|generate-tickets|generate-series|add-rsvp|add-tickets|add-attendees|cleanup|migrate|revert`
 includes/class-admin.php     # Tools > TEC Data Generator page (also enqueues tribe-common-admin for TEC CSS vars, guarded)
-includes/class-ajax.php      # chunked generate/generate-events/generate-tickets/cleanup AJAX + scenario schedule/status + migration run/revert/status
-views/admin-page.php         # admin page markup (Scenario, Add-to-existing, Generate Events, Generate Tickets, Cleanup, Migration sections)
-assets/admin.js, admin.css   # vanilla JS: chunk loops (generate/events/tickets/cleanup), status polling (scenario/migration), no build step; CSS uses TEC admin variables with fallbacks
+includes/class-ajax.php      # chunked generate/generate-events/generate-tickets/generate-series/cleanup AJAX + scenario schedule/status + migration run/revert/status
+views/admin-page.php         # admin page markup (Scenario, Add-to-existing, Generate Events, Generate Tickets, Generate Series, Cleanup, Migration sections)
+assets/admin.js, admin.css   # vanilla JS: chunk loops (generate/events/tickets/series/cleanup), status polling (scenario/migration), no build step; CSS uses TEC admin variables with fallbacks
 ```
 
 ## Verifying changes
@@ -184,6 +201,7 @@ and isn't expected to be). Verify changes manually against a real WordPress inst
 wp tec-data-generator generate --count=10   # small smoke test after any Generator change
 wp tec-data-generator generate-events --count=10 --editor=block  # smoke test after any container/editor change
 wp tec-data-generator generate-tickets --count=5 --container=page # smoke test after any ticket-attach change
+wp tec-data-generator generate-series --count=2 --events-per-series=3 --with-venues # smoke test after any series change
 wp tec-data-generator scenario --type=usual # smoke test after any scenario/orphaning change (small by design)
 wp tec-data-generator migrate               # smoke test after any Migration change; check status settles to "completed"
 wp tec-data-generator revert                # confirm revert puts status back to a runnable state
@@ -205,6 +223,12 @@ polling and shows the same in-progress state rather than looking idle.
 If you don't have a live WP/Lando environment available in your session, say so explicitly rather than
 claiming the change works — `php -l` only catches syntax errors, not whether the WordPress/Event
 Tickets/The Events Calendar APIs were called correctly.
+
+After any change touching RSVP ticket/attendee creation (`create_rsvp_ticket()`, `create_adhoc_rsvp_ticket()`,
+`add_attendees()`'s RSVP branch, or `with_v1_rsvp_repositories()` itself), smoke-test on **both** an RSVP V1
+site and one that has completed the `rsvp-to-tc` migration (RSVP V2 active) — check the admin page's
+"Currently generated" Ticket count actually increments after `add-rsvp`/`generate-tickets` on the V2 site.
+The V1-vs-V2 divergence is invisible if you only ever test against a fresh V1 install.
 
 ## Coding style
 

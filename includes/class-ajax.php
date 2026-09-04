@@ -16,6 +16,7 @@ class Ajax {
 	const ACTION_GENERATE = 'tec_data_generator_generate_batch';
 	const ACTION_GENERATE_EVENTS = 'tec_data_generator_generate_events_batch';
 	const ACTION_GENERATE_TICKETS = 'tec_data_generator_generate_tickets_batch';
+	const ACTION_GENERATE_SERIES = 'tec_data_generator_generate_series_batch';
 	const ACTION_CLEANUP  = 'tec_data_generator_cleanup_batch';
 	const ACTION_STATUS   = 'tec_data_generator_status';
 
@@ -38,6 +39,7 @@ class Ajax {
 		add_action( 'wp_ajax_' . self::ACTION_GENERATE, [ $this, 'handle_generate' ] );
 		add_action( 'wp_ajax_' . self::ACTION_GENERATE_EVENTS, [ $this, 'handle_generate_events' ] );
 		add_action( 'wp_ajax_' . self::ACTION_GENERATE_TICKETS, [ $this, 'handle_generate_tickets' ] );
+		add_action( 'wp_ajax_' . self::ACTION_GENERATE_SERIES, [ $this, 'handle_generate_series' ] );
 		add_action( 'wp_ajax_' . self::ACTION_SCHEDULE_SCENARIO, [ $this, 'handle_schedule_scenario' ] );
 		add_action( 'wp_ajax_' . self::ACTION_SCENARIO_STATUS, [ $this, 'handle_scenario_status' ] );
 		add_action( 'wp_ajax_' . self::ACTION_CANCEL_SCENARIO, [ $this, 'handle_cancel_scenario' ] );
@@ -107,7 +109,7 @@ class Ajax {
 					'with_venues'     => ! empty( $_POST['with_venues'] ),
 					'with_organizers' => ! empty( $_POST['with_organizers'] ),
 					'event_types'     => $raw_event_types,
-					'container'       => in_array( $container, [ 'event', 'page' ], true ) ? $container : 'event',
+					'container'       => 'event',
 					'editor'          => in_array( $editor, [ 'classic', 'block' ], true ) ? $editor : 'classic',
 				];
 			},
@@ -131,8 +133,6 @@ class Ajax {
 	 */
 	public function handle_generate_tickets(): void {
 		$this->verify_request();
-
-		$chunk_size = min( self::MAX_CHUNK_SIZE, max( 1, (int) ( $_POST['chunk_size'] ?? 75 ) ) );
 
 		$event_id = (int) ( $_POST['event_id'] ?? 0 );
 
@@ -213,6 +213,43 @@ class Ajax {
 					'container'          => $state['container'] ?? 'event',
 					'editor'             => $state['editor'] ?? 'classic',
 					'ticket_type'        => $state['ticket_type'] ?? 'rsvp',
+				] );
+			}
+		);
+	}
+
+	/**
+	 * Chunked "Generate Series" handler. Creates series with events grouped together.
+	 */
+	public function handle_generate_series(): void {
+		$this->verify_request();
+
+		$total              = max( 1, (int) ( $_POST['total'] ?? 0 ) );
+		$events_per_series  = max( 1, (int) ( $_POST['events_per_series'] ?? 5 ) );
+		$min_attendees      = max( 1, (int) ( $_POST['min_attendees'] ?? 1 ) );
+		$max_attendees      = max( $min_attendees, (int) ( $_POST['max_attendees'] ?? 20 ) );
+		$ticket_type        = isset( $_POST['ticket_type'] ) ? sanitize_text_field( wp_unslash( $_POST['ticket_type'] ) ) : 'rsvp';
+
+		$this->chunked_request_handler(
+			function ( $run_id ) use ( $total, $min_attendees, $max_attendees, $ticket_type, $events_per_series ) {
+				return [
+					'total'              => $total,
+					'done'               => 0,
+					'events_per_series'  => $events_per_series,
+					'min_attendees'      => $min_attendees,
+					'max_attendees'      => $max_attendees,
+					'with_venues'        => ! empty( $_POST['with_venues'] ),
+					'with_organizers'    => ! empty( $_POST['with_organizers'] ),
+					'ticket_type'        => in_array( $ticket_type, [ 'rsvp', 'paid', 'none' ], true ) ? $ticket_type : 'rsvp',
+				];
+			},
+			function ( $generator, $run_id, &$state, $this_run ) {
+				$generator->generate_series( $this_run, $state['done'], $state['events_per_series'], [
+					'min_attendees'    => $state['min_attendees'],
+					'max_attendees'    => $state['max_attendees'],
+					'with_venues'      => $state['with_venues'],
+					'with_organizers'  => $state['with_organizers'],
+					'ticket_type'      => $state['ticket_type'],
 				] );
 			}
 		);

@@ -59,6 +59,7 @@ class Admin {
 				'generate'         => Ajax::ACTION_GENERATE,
 				'generateEvents'   => Ajax::ACTION_GENERATE_EVENTS,
 				'generateTickets'  => Ajax::ACTION_GENERATE_TICKETS,
+				'generateSeries'   => Ajax::ACTION_GENERATE_SERIES,
 				'scheduleScenario' => Ajax::ACTION_SCHEDULE_SCENARIO,
 				'scenarioStatus'   => Ajax::ACTION_SCENARIO_STATUS,
 				'cancelScenario'   => Ajax::ACTION_CANCEL_SCENARIO,

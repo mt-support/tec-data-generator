@@ -60,14 +60,16 @@ if ( ! defined( 'ABSPATH' ) ) {
 		<table class="widefat striped" style="max-width: 480px;" id="tec-data-generator-counts">
 			<tbody>
 			<?php
+			// Ticket/attendee post types have no edit.php list screen (registered
+			// show_ui => false; WordPress core's edit.php hard-dies on those), so they
+			// aren't linkable here — only post types with a real list table are.
 			$post_type_map = [
-				'events'   => 'tribe_events',
-				'pages'    => 'page',
-				'posts'    => 'post',
-				'tickets'  => 'tribe_rsvp',
-				'attendees' => 'tribe_attendees',
-				'venues'   => 'tribe_venue',
-				'organizers' => 'tribe_organizer',
+				'event'     => 'tribe_events',
+				'page'      => 'page',
+				'post'      => 'post',
+				'series'    => 'tribe_event_series',
+				'venue'     => 'tribe_venue',
+				'organizer' => 'tribe_organizer',
 			];
 			?>
 			<?php foreach ( $counts as $kind => $count ) : ?>
@@ -179,8 +181,6 @@ if ( ! defined( 'ABSPATH' ) ) {
 				<th><?php esc_html_e( 'Container', 'tec-data-generator' ); ?></th>
 				<td>
 					<label><input type="radio" name="tec-data-generator-events-container" value="event" checked> <?php esc_html_e( 'Event', 'tec-data-generator' ); ?></label>
-					&nbsp;&nbsp;
-					<label><input type="radio" name="tec-data-generator-events-container" value="page"> <?php esc_html_e( 'Page', 'tec-data-generator' ); ?></label>
 				</td>
 			</tr>
 			<tr>
@@ -305,7 +305,62 @@ if ( ! defined( 'ABSPATH' ) ) {
 		</div>
 		<div id="tec-data-generator-tickets-notice" class="notice inline tec-data-generator-notice" hidden><p></p></div>
 	</section>
-	
+
+	<section class="tec-data-generator-section">
+		<h2><?php esc_html_e( 'Generate Series', 'tec-data-generator' ); ?></h2>
+		<p>
+			<?php esc_html_e( 'Creates event series: groups of events with different venues and organizers, linked together. Each event can have tickets and attendees.', 'tec-data-generator' ); ?>
+		</p>
+		<table class="form-table">
+			<tr>
+				<th><label for="tec-data-generator-series-total"><?php esc_html_e( 'Series to create', 'tec-data-generator' ); ?></label></th>
+				<td><input type="number" id="tec-data-generator-series-total" value="5" min="1" step="1" class="small-text"></td>
+			</tr>
+			<tr>
+				<th><label for="tec-data-generator-series-events-per"><?php esc_html_e( 'Events per series', 'tec-data-generator' ); ?></label></th>
+				<td><input type="number" id="tec-data-generator-series-events-per" value="5" min="1" step="1" class="small-text"></td>
+			</tr>
+			<tr>
+				<th><?php esc_html_e( 'Per event', 'tec-data-generator' ); ?></th>
+				<td>
+					<label><input type="checkbox" id="tec-data-generator-series-with-venues"> <?php esc_html_e( 'Different venue', 'tec-data-generator' ); ?></label>
+					&nbsp;&nbsp;
+					<label><input type="checkbox" id="tec-data-generator-series-with-organizers"> <?php esc_html_e( 'Different organizer', 'tec-data-generator' ); ?></label>
+				</td>
+			</tr>
+			<tr>
+				<th><?php esc_html_e( 'Ticket type', 'tec-data-generator' ); ?></th>
+				<td>
+					<label><input type="radio" name="tec-data-generator-series-ticket-type" value="rsvp" checked <?php disabled( empty( $plugin_availability['has_event_tickets'] ) ); ?>> <?php esc_html_e( 'RSVP', 'tec-data-generator' ); ?></label>
+					&nbsp;&nbsp;
+					<label><input type="radio" name="tec-data-generator-series-ticket-type" value="paid" <?php disabled( empty( $plugin_availability['has_event_tickets'] ) ); ?>> <?php esc_html_e( 'Paid', 'tec-data-generator' ); ?></label>
+					&nbsp;&nbsp;
+					<label><input type="radio" name="tec-data-generator-series-ticket-type" value="none"> <?php esc_html_e( 'None', 'tec-data-generator' ); ?></label>
+				</td>
+			</tr>
+			<tr>
+				<th><?php esc_html_e( 'Attendees per ticket', 'tec-data-generator' ); ?></th>
+				<td>
+					<label><?php esc_html_e( 'Min', 'tec-data-generator' ); ?> <input type="number" id="tec-data-generator-series-min-attendees" value="1" min="1" step="1" class="small-text"></label>
+					<label><?php esc_html_e( 'Max', 'tec-data-generator' ); ?> <input type="number" id="tec-data-generator-series-max-attendees" value="20" min="1" step="1" class="small-text"></label>
+				</td>
+			</tr>
+		</table>
+
+		<p>
+			<button type="button" class="button button-primary" id="tec-data-generator-series-generate-btn">
+				<?php esc_html_e( 'Generate series', 'tec-data-generator' ); ?>
+			</button>
+			<span class="spinner tec-data-generator-spinner" id="tec-data-generator-series-spinner"></span>
+		</p>
+
+		<div id="tec-data-generator-series-progress" class="tec-data-generator-progress" hidden>
+			<div class="tec-data-generator-progress-bar"><div class="tec-data-generator-progress-fill"></div></div>
+			<p class="tec-data-generator-progress-label"></p>
+		</div>
+		<div id="tec-data-generator-series-notice" class="notice inline tec-data-generator-notice" hidden><p></p></div>
+	</section>
+
 	<section class="tec-data-generator-section tec-data-generator-danger">
 		<h2><?php esc_html_e( 'Cleanup', 'tec-data-generator' ); ?></h2>
 		<p>

@@ -164,7 +164,9 @@ class Generator {
 			],
 		];
 
-		$ticket_id = tribe( 'tickets.rsvp' )->ticket_add( $event_id, $data );
+		$ticket_id = $this->with_v1_rsvp_repositories( function () use ( $event_id, $data ) {
+			return tribe( 'tickets.rsvp' )->ticket_add( $event_id, $data );
+		} );
 
 		if ( ! $ticket_id ) {
 			return 0;
@@ -276,7 +278,9 @@ class Generator {
 
 			try {
 				if ( $is_rsvp ) {
-					$attendee_id = (int) tribe( 'tickets.rsvp' )->create_attendee_for_ticket( $ticket_post, $data );
+					$attendee_id = (int) $this->with_v1_rsvp_repositories( function () use ( $ticket_post, $data ) {
+						return tribe( 'tickets.rsvp' )->create_attendee_for_ticket( $ticket_post, $data );
+					} );
 				} else {
 					$attendee = tribe( 'tickets.attendees' )->create_attendee( $ticket_id, $data );
 					$attendee_id = $attendee instanceof \WP_Post ? $attendee->ID : 0;
@@ -294,6 +298,143 @@ class Generator {
 		}
 
 		return $attendee_ids;
+	}
+
+	/**
+	 * Generates series with events. Each series contains N events (default 5) with different
+	 * venues/organizers, optionally with tickets.
+	 *
+	 * @param int   $count              Number of series to create.
+	 * @param int   $offset             Global sequence offset for name uniqueness.
+	 * @param int   $events_per_series  Events per series (default 5).
+	 * @param array $options            {
+	 *     @type int $min_attendees      Minimum attendees per ticket. Default 1.
+	 *     @type int $max_attendees      Maximum attendees per ticket. Default 20.
+	 *     @type bool $with_venues       Attach different venue to each event. Default false.
+	 *     @type bool $with_organizers   Attach different organizer to each event. Default false.
+	 *     @type string $ticket_type     Ticket mode: rsvp, paid, or none. Default 'rsvp'.
+	 *     @type string $editor          Container editor: classic or block. Default 'classic'.
+	 * }
+	 *
+	 * @return array{created:int,series_ids:int[],post_ids:int[],ticket_ids:int[],attendee_ids:int[]}
+	 */
+	public function generate_series( int $count, int $offset, int $events_per_series = 5, array $options = [] ): array {
+		$this->options = $options;
+		$this->options['ticket_type'] = $this->options['ticket_type'] ?? 'rsvp';
+		$this->options['editor'] = $this->normalize_editor( $this->options['editor'] ?? 'classic' );
+		$this->options['event_types'] = [ 'single' ];
+
+		return $this->run_with_performance_guards( function () use ( $count, $offset, $events_per_series ) {
+			$series_ids   = [];
+			$post_ids     = [];
+			$ticket_ids   = [];
+			$attendee_ids = [];
+
+			for ( $s = 0; $s < $count; $s++ ) {
+				$series_seq  = $offset + $s;
+				$series_id   = $this->create_series( $series_seq );
+
+				if ( ! $series_id ) {
+					continue;
+				}
+
+				$series_ids[] = $series_id;
+
+				for ( $e = 0; $e < $events_per_series; $e++ ) {
+					$event_seq = ( $series_seq * 1000 ) + $e;
+					$venue_id  = ! empty( $this->options['with_venues'] ) ? $this->pick_venue() : 0;
+					$org_id    = ! empty( $this->options['with_organizers'] ) ? $this->pick_organizer() : 0;
+
+					try {
+						$event_id = $this->create_single_event( $event_seq, $venue_id, $org_id );
+
+						if ( $event_id ) {
+							$post_ids[] = $event_id;
+							$this->link_event_to_series( $event_id, $series_id );
+
+							$attached = $this->attach_tickets( $event_id, $event_seq );
+							$ticket_ids   = array_merge( $ticket_ids, $attached['ticket_ids'] );
+							$attendee_ids = array_merge( $attendee_ids, $attached['attendee_ids'] );
+						}
+					} catch ( \Exception $e ) {
+						continue;
+					}
+				}
+			}
+
+			return [
+				'created'      => count( $series_ids ),
+				'series_ids'   => $series_ids,
+				'post_ids'     => $post_ids,
+				'ticket_ids'   => $ticket_ids,
+				'attendee_ids' => $attendee_ids,
+			];
+		} );
+	}
+
+	/**
+	 * Creates a tribe_event_series post using the Events Pro API.
+	 */
+	private function create_series( int $seq ): int {
+		if ( ! function_exists( 'tribe' ) || ! class_exists( '\TEC\Events_Pro\Custom_Tables\V1\Models\Series' ) ) {
+			return 0;
+		}
+
+		$series_class = '\TEC\Events_Pro\Custom_Tables\V1\Models\Series';
+		$title        = Data::random_event_title() . " Series (#{$seq})";
+
+		$series_id = $series_class::vinsert( [ 'title' => $title ] );
+
+		if ( $series_id ) {
+			$this->tag_generated( $series_id, 'series' );
+		}
+
+		return $series_id;
+	}
+
+	/**
+	 * Links an event to a series via the Series_Relationship table.
+	 */
+	private function link_event_to_series( int $post_id, int $series_id ): bool {
+		if ( ! class_exists( '\TEC\Events_Pro\Custom_Tables\V1\Models\Series_Relationship' )
+			|| ! class_exists( '\TEC\Events\Custom_Tables\V1\Models\Event' ) ) {
+			return false;
+		}
+
+		try {
+			$event_post = get_post( $post_id );
+
+			if ( ! $event_post || 'tribe_events' !== $event_post->post_type ) {
+				return false;
+			}
+
+			// Get event_id from custom tables
+			$event = \TEC\Events\Custom_Tables\V1\Models\Event::where( 'post_id', $post_id )->first();
+
+			if ( ! $event ) {
+				return false;
+			}
+
+			$series_relationship_class = '\TEC\Events_Pro\Custom_Tables\V1\Models\Series_Relationship';
+			$existing = $series_relationship_class::where( 'series_post_id', $series_id )
+				->where( 'event_post_id', $post_id )
+				->where( 'event_id', $event->event_id )
+				->first();
+
+			if ( $existing ) {
+				return true;
+			}
+
+			$series_relationship_class::insert( [
+				'series_post_id' => $series_id,
+				'event_post_id'  => $post_id,
+				'event_id'       => $event->event_id,
+			] );
+
+			return true;
+		} catch ( \Exception $e ) {
+			return false;
+		}
 	}
 
 	/**
@@ -592,13 +733,6 @@ class Generator {
 	}
 
 	/**
-	 * Legacy entry point kept for backward compatibility — delegates to create_single_event().
-	 */
-	private function create_event_post( int $seq, int $venue_id = 0, int $organizer_id = 0 ): int {
-		return $this->create_single_event( $seq, $venue_id, $organizer_id );
-	}
-
-	/**
 	 * Creates a plain single (non-recurring, non-virtual) `tribe_events` post via
 	 * The Events Calendar's own repository ORM, so it has valid start/end dates and
 	 * behaves like a real event on the front end.
@@ -877,9 +1011,6 @@ class Generator {
 	 *                    so multiple tickets on one event get distinguishable titles.
 	 */
 	private function create_rsvp_ticket( int $post_id, int $seq, int $index = 0 ): int {
-		/** @var \Tribe__Tickets__RSVP $rsvp */
-		$rsvp = tribe( 'tickets.rsvp' );
-
 		$capacity = wp_rand( 20, 200 );
 
 		$data = [
@@ -897,7 +1028,9 @@ class Generator {
 			],
 		];
 
-		$ticket_id = $rsvp->ticket_add( $post_id, $data );
+		$ticket_id = $this->with_v1_rsvp_repositories( function () use ( $post_id, $data ) {
+			return tribe( 'tickets.rsvp' )->ticket_add( $post_id, $data );
+		} );
 
 		if ( ! $ticket_id ) {
 			return 0;
@@ -1008,6 +1141,65 @@ class Generator {
 		update_post_meta( $post_id, Data::GENERATED_META_KEY, 1 );
 		update_post_meta( $post_id, Data::RUN_ID_META_KEY, $this->run_id );
 		update_post_meta( $post_id, Data::POST_KIND_META_KEY, $kind );
+	}
+
+	/**
+	 * Forces `tribe( 'tickets.rsvp' )` calls made inside $callback to create the legacy V1
+	 * `tribe_rsvp_tickets`/`tribe_rsvp_attendees` shape, regardless of whether the site's RSVP
+	 * feature is currently running in V1 or V2 (Tickets Commerce-backed) mode.
+	 *
+	 * Event Tickets 5.x resolves `Tribe__Tickets__RSVP::save_ticket()` and
+	 * `create_attendee_for_ticket()` through container-bound repositories
+	 * (`tickets.ticket-repository.rsvp` / `tickets.attendee-repository.rsvp`) rather than
+	 * hard-coding the post type — on a site that's already run the rsvp-to-tc migration (RSVP
+	 * V2 active), those bindings point at Tickets Commerce repositories, so the "same production
+	 * API" this plugin relies on would silently create `tec_tc_ticket` posts instead of the V1
+	 * shape this tool's whole purpose depends on. Temporarily rebinding to the known V1
+	 * repository classes guarantees V1 output on both V1 and V2 sites, then restores whatever
+	 * was bound before so the rest of the site is unaffected.
+	 *
+	 * @template T
+	 * @param callable():T $callback
+	 * @return T
+	 */
+	private function with_v1_rsvp_repositories( callable $callback ) {
+		if ( ! class_exists( '\Tribe__Tickets__Repositories__Ticket__RSVP' ) || ! function_exists( 'tribe' ) ) {
+			return $callback();
+		}
+
+		$container = tribe();
+
+		$previous_ticket_repo   = $this->safe_make( $container, 'tickets.ticket-repository.rsvp' );
+		$previous_attendee_repo = $this->safe_make( $container, 'tickets.attendee-repository.rsvp' );
+
+		$container->bind( 'tickets.ticket-repository.rsvp', \Tribe__Tickets__Repositories__Ticket__RSVP::class );
+
+		if ( class_exists( '\Tribe__Tickets__Repositories__Attendee__RSVP' ) ) {
+			$container->bind( 'tickets.attendee-repository.rsvp', \Tribe__Tickets__Repositories__Attendee__RSVP::class );
+		}
+
+		try {
+			return $callback();
+		} finally {
+			if ( $previous_ticket_repo ) {
+				$container->bind( 'tickets.ticket-repository.rsvp', get_class( $previous_ticket_repo ) );
+			}
+
+			if ( $previous_attendee_repo ) {
+				$container->bind( 'tickets.attendee-repository.rsvp', get_class( $previous_attendee_repo ) );
+			}
+		}
+	}
+
+	/**
+	 * @return object|null
+	 */
+	private function safe_make( $container, string $id ) {
+		try {
+			return $container->make( $id );
+		} catch ( \Exception $e ) {
+			return null;
+		}
 	}
 
 	/**
