@@ -174,6 +174,20 @@ class Generator {
 
 		$this->tag_generated( (int) $ticket_id, 'ticket' );
 
+		// Ensure the event's default ticket provider is set so the admin UI displays the tickets metabox.
+		update_post_meta( $event_id, '_tribe_default_ticket_provider', \Tribe__Tickets__RSVP::class );
+
+		// On V2 sites, also create the V2 representation so the WordPress admin can see it via Tickets Commerce repository.
+		if ( function_exists( 'tribe' ) && class_exists( 'Tribe__Tickets__RSVP' ) ) {
+			// Call without the V1 wrapper to use the current provider binding (which will be V2 on RSVP V2 sites).
+			$v2_ticket_id = tribe( 'tickets.rsvp' )->ticket_add( $event_id, $data );
+			if ( $v2_ticket_id ) {
+				$this->tag_generated( (int) $v2_ticket_id, 'ticket' );
+				// set _type explicitly for V2 tickets so the repository query can find them
+				update_post_meta( (int) $v2_ticket_id, '_type', 'tc-rsvp' );
+			}
+		}
+
 		return (int) $ticket_id;
 	}
 
@@ -1037,6 +1051,21 @@ class Generator {
 		}
 
 		$this->tag_generated( (int) $ticket_id, 'ticket' );
+
+		// Ensure the event's default ticket provider is set so the admin UI displays the tickets metabox.
+		// On RSVP V2 sites, also create the V2 representation so the WordPress admin can see it via Tickets Commerce repository.
+		update_post_meta( $post_id, '_tribe_default_ticket_provider', \Tribe__Tickets__RSVP::class );
+
+		// On V2 sites, create the V2 representation so the WordPress admin UI can see it.
+		if ( function_exists( 'tribe' ) && class_exists( 'Tribe__Tickets__RSVP' ) ) {
+			// Call without the V1 wrapper to use the current provider binding (which will be V2 on RSVP V2 sites).
+			$v2_ticket_id = tribe( 'tickets.rsvp' )->ticket_add( $post_id, $data );
+			if ( $v2_ticket_id ) {
+				$this->tag_generated( (int) $v2_ticket_id, 'ticket' );
+				// set _type explicitly for V2 tickets so the repository query can find them
+				update_post_meta( (int) $v2_ticket_id, '_type', 'tc-rsvp' );
+			}
+		}
 
 		return (int) $ticket_id;
 	}

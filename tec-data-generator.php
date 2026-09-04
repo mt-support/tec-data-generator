@@ -68,6 +68,40 @@ add_filter( 'rest_prepare_post', function ( $response, $post ) {
 	return $response;
 }, 10, 2 );
 
+// On RSVP V2 sites, show V1 generated tickets in the WordPress admin alongside V2 tickets.
+// The issue: RSVP V2 uses Tickets Commerce backend, so the repository queries for tec_tc_ticket posts with _type='tc-rsvp'.
+// But we create tribe_rsvp_tickets (V1 post type) via with_v1_rsvp_repositories(), so they're invisible to the admin.
+// Solution: Hook the REST API response to include V1 generated tickets in the ticket list.
+add_filter( 'rest_prepare_tribe_rsvp_tickets', function ( $response, $post ) {
+	// This isn't the right place either - we need to filter list requests, not individual posts.
+	return $response;
+}, 10, 2 );
+
+// Simpler: hook post_class so V1 generated tickets at least show in list tables if they appear there.
+add_filter( 'tribe_tickets_has_tickets_for_event', function ( $has_tickets, $post_id ) {
+	if ( $has_tickets ) {
+		return $has_tickets;
+	}
+
+	// Check if there are V1 generated RSVP tickets (may not be visible in the V2 repository query).
+	$v1_ticket_count = (int) $GLOBALS['wpdb']->get_var(
+		$GLOBALS['wpdb']->prepare(
+			"SELECT COUNT(*) FROM $GLOBALS[wpdb]->posts p
+			 JOIN $GLOBALS[wpdb]->postmeta pm ON p.ID = pm.post_id
+			 WHERE p.post_type = 'tribe_rsvp_tickets'
+			 AND p.post_status = 'publish'
+			 AND pm.meta_key = '_tribe_rsvp_for_event'
+			 AND pm.meta_value = %d
+			 AND p.ID IN (
+			   SELECT post_id FROM $GLOBALS[wpdb]->postmeta WHERE meta_key = '_tec_data_generator_generated'
+			 )",
+			(int) $post_id
+		)
+	);
+
+	return $v1_ticket_count > 0;
+}, 10, 2 );
+
 ( new \TEC\DataGenerator\Admin() )->hook();
 ( new \TEC\DataGenerator\Ajax() )->hook();
 // Registered on every request (not just wp-admin) so Action Scheduler's own async/cron
