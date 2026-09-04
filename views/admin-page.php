@@ -1,30 +1,41 @@
 <?php
 /**
- * Admin page markup for Tools > RSVP Load Generator.
+ * Admin page markup for Tools > TEC Data Generator.
  *
  * @var array<string,int>       $counts    Current generated-record counts, keyed by kind.
- * @var \RSVP_Loadgen\Migration $migration Wrapper around the rsvp-to-tc migration.
+ * @var \TEC\DataGenerator\Migration $migration Wrapper around the rsvp-to-tc migration.
+ * @var array<string,bool>      $plugin_availability Which optional dependency plugins are active.
+ * @var string[]                $missing_ticket_types Page/Post types missing from the stored ticket-enabled list.
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 ?>
-<div class="wrap rsvp-loadgen-wrap">
-	<h1><?php esc_html_e( 'RSVP Load Generator', 'rsvp-migration-loadgen' ); ?></h1>
+<div class="wrap tec-data-generator-wrap">
+	<h1><?php esc_html_e( 'TEC Data Generator', 'tec-data-generator' ); ?></h1>
 
 	<p>
-		<?php esc_html_e( 'Generates legacy V1 RSVP tickets (with attendees) on newly-created Event/Page/Post content, to stress-test the RSVP-to-Tickets-Commerce migration. Everything created here is tagged and can be fully removed with Cleanup.', 'rsvp-migration-loadgen' ); ?>
+		<strong><?php esc_html_e( 'For large runs (1000+), prefer WP-CLI:', 'tec-data-generator' ); ?></strong>
+		<code>wp tec-data-generator generate --count=5000</code> &mdash;
+		<?php esc_html_e( 'the admin UI below is chunked but slower and tab-bound.', 'tec-data-generator' ); ?>
 	</p>
-
-	<p>
-		<strong><?php esc_html_e( 'For large runs (1000+), prefer WP-CLI:', 'rsvp-migration-loadgen' ); ?></strong>
-		<code>wp rsvp-loadgen generate --count=5000</code> &mdash;
-		<?php esc_html_e( 'the admin UI below is chunked but slower and tab-bound.', 'rsvp-migration-loadgen' ); ?>
-	</p>
-	<section class="rsvp-loadgen-section">
-		<h2><?php esc_html_e( 'Currently generated', 'rsvp-migration-loadgen' ); ?></h2>
-		<table class="widefat striped" style="max-width: 480px;" id="rsvp-loadgen-counts">
+	<?php if ( ! empty( $missing_ticket_types ) ) : ?>
+	<div class="notice notice-warning inline">
+		<p>
+			<?php
+			printf(
+				/* translators: %s: comma-separated list of post types, e.g. "Post" or "Page, Post". */
+				esc_html__( 'Heads up: %s is not enabled for tickets in Event Tickets settings, so the Tickets/RSVP blocks will not appear in the block editor for it. Enable it under Event Tickets > Settings > Ticket-enabled post types. Generated data is unaffected (the CLI/admin generation path adds its own runtime support).', 'tec-data-generator' ),
+				esc_html( implode( ', ', array_map( 'ucfirst', $missing_ticket_types ) ) )
+			);
+			?>
+		</p>
+	</div>
+	<?php endif; ?>
+	<section class="tec-data-generator-section">
+		<h2><?php esc_html_e( 'Currently generated', 'tec-data-generator' ); ?></h2>
+		<table class="widefat striped" style="max-width: 480px;" id="tec-data-generator-counts">
 			<tbody>
 			<?php foreach ( $counts as $kind => $count ) : ?>
 				<tr>
@@ -35,153 +46,267 @@ if ( ! defined( 'ABSPATH' ) ) {
 			</tbody>
 		</table>
 	</section>
-	<section class="rsvp-loadgen-section">
-		<h2><?php esc_html_e( 'Scenario (recommended)', 'rsvp-migration-loadgen' ); ?></h2>
+	<section class="tec-data-generator-section">
+		<h2><?php esc_html_e( 'Scenario (recommended)', 'tec-data-generator' ); ?></h2>
 		<p>
-			<?php esc_html_e( 'Generates one of two pre-defined QA scenarios, including a percentage of "orphaned" RSVPs — an Event/Page/Post deleted while its RSVP ticket(s) and attendees are left behind. This is the main edge case this tool exists to reproduce.', 'rsvp-migration-loadgen' ); ?>
+			<?php esc_html_e( 'Generates one of two pre-defined QA scenarios, including a percentage of "orphaned" RSVPs — an Event/Page/Post deleted while its RSVP ticket(s) and attendees are left behind. This is the main edge case this tool exists to reproduce.', 'tec-data-generator' ); ?>
 		</p>
 		<p>
-			<?php esc_html_e( 'Runs entirely in the background (via Action Scheduler), same as the migration controls below — feel free to navigate away or close this tab once started. Progress resumes automatically when you come back to this page.', 'rsvp-migration-loadgen' ); ?>
+			<?php esc_html_e( 'Runs entirely in the background (via Action Scheduler), same as the migration controls below — feel free to navigate away or close this tab once started. Progress resumes automatically when you come back to this page.', 'tec-data-generator' ); ?>
 		</p>
 		<table class="form-table">
 			<tr>
-				<th><label for="rsvp-loadgen-scenario-type"><?php esc_html_e( 'Scenario', 'rsvp-migration-loadgen' ); ?></label></th>
+				<th><label for="tec-data-generator-scenario-type"><?php esc_html_e( 'Scenario', 'tec-data-generator' ); ?></label></th>
 				<td>
-					<select id="rsvp-loadgen-scenario-type">
-						<option value="usual"><?php esc_html_e( 'Usual (25–250 events, 1–3 RSVPs each, 5%–20% orphaned)', 'rsvp-migration-loadgen' ); ?></option>
-						<option value="edge"><?php esc_html_e( 'Edge case (7,000–11,000 events, 1–9 RSVPs each, 5%–20% orphaned — can take a while)', 'rsvp-migration-loadgen' ); ?></option>
+					<select id="tec-data-generator-scenario-type">
+						<option value="usual"><?php esc_html_e( 'Usual (25–250 events, 1–3 RSVPs each, 5%–20% orphaned)', 'tec-data-generator' ); ?></option>
+						<option value="edge"><?php esc_html_e( 'Edge case (7,000–11,000 events, 1–9 RSVPs each, 5%–20% orphaned — can take a while)', 'tec-data-generator' ); ?></option>
 					</select>
 				</td>
 			</tr>
 			<tr>
-				<th><?php esc_html_e( 'Attach', 'rsvp-migration-loadgen' ); ?></th>
+				<th><?php esc_html_e( 'Attach', 'tec-data-generator' ); ?></th>
 				<td>
-					<label><input type="checkbox" id="rsvp-loadgen-scenario-with-venues"> <?php esc_html_e( 'Venues', 'rsvp-migration-loadgen' ); ?></label>
+					<label><input type="checkbox" id="tec-data-generator-scenario-with-venues"> <?php esc_html_e( 'Venues', 'tec-data-generator' ); ?></label>
 					&nbsp;&nbsp;
-					<label><input type="checkbox" id="rsvp-loadgen-scenario-with-organizers"> <?php esc_html_e( 'Organizers', 'rsvp-migration-loadgen' ); ?></label>
+					<label><input type="checkbox" id="tec-data-generator-scenario-with-organizers"> <?php esc_html_e( 'Organizers', 'tec-data-generator' ); ?></label>
 				</td>
 			</tr>
 		</table>
 		<p>
-			<button type="button" class="button button-primary" id="rsvp-loadgen-scenario-btn">
-				<?php esc_html_e( 'Generate scenario', 'rsvp-migration-loadgen' ); ?>
+			<button type="button" class="button button-primary" id="tec-data-generator-scenario-btn">
+				<?php esc_html_e( 'Generate scenario', 'tec-data-generator' ); ?>
 			</button>
-			<span class="spinner rsvp-loadgen-spinner" id="rsvp-loadgen-scenario-spinner"></span>
+			<span class="spinner tec-data-generator-spinner" id="tec-data-generator-scenario-spinner"></span>
 		</p>
-		<div id="rsvp-loadgen-scenario-progress" class="rsvp-loadgen-progress" hidden>
-			<div class="rsvp-loadgen-progress-bar"><div class="rsvp-loadgen-progress-fill"></div></div>
-			<p class="rsvp-loadgen-progress-label"></p>
+		<div id="tec-data-generator-scenario-progress" class="tec-data-generator-progress" hidden>
+			<div class="tec-data-generator-progress-bar"><div class="tec-data-generator-progress-fill"></div></div>
+			<p class="tec-data-generator-progress-label"></p>
 		</div>
-		<div id="rsvp-loadgen-scenario-notice" class="notice inline rsvp-loadgen-notice" hidden><p></p></div>
+		<div id="tec-data-generator-scenario-notice" class="notice inline tec-data-generator-notice" hidden><p></p></div>
 	</section>
 
-	<section class="rsvp-loadgen-section">
-		<h2><?php esc_html_e( 'Add to existing content', 'rsvp-migration-loadgen' ); ?></h2>
+	<section class="tec-data-generator-section">
+		<h2><?php esc_html_e( 'Add to existing content', 'tec-data-generator' ); ?></h2>
 		<p>
-			<?php esc_html_e( 'Attach RSVP tickets, paid tickets, or attendees to an event/ticket that already exists on this site (generated by this tool or not).', 'rsvp-migration-loadgen' ); ?>
+			<?php esc_html_e( 'Attach RSVP tickets, paid tickets, or attendees to an event/ticket that already exists on this site (generated by this tool or not).', 'tec-data-generator' ); ?>
 		</p>
 		<table class="form-table">
 			<tr>
-				<th><label for="rsvp-loadgen-addrsvp-event-id"><?php esc_html_e( 'Add RSVP tickets — Event ID', 'rsvp-migration-loadgen' ); ?></label></th>
+				<th><label for="tec-data-generator-addrsvp-event-id"><?php esc_html_e( 'Add RSVP tickets — Event ID', 'tec-data-generator' ); ?></label></th>
 				<td>
-					<input type="number" id="rsvp-loadgen-addrsvp-event-id" min="1" step="1" class="small-text">
-					<label><?php esc_html_e( 'Quantity', 'rsvp-migration-loadgen' ); ?> <input type="number" id="rsvp-loadgen-addrsvp-quantity" value="1" min="1" step="1" class="small-text"></label>
-					<button type="button" class="button" id="rsvp-loadgen-addrsvp-btn"><?php esc_html_e( 'Add RSVP tickets', 'rsvp-migration-loadgen' ); ?></button>
-					<span class="spinner rsvp-loadgen-spinner" id="rsvp-loadgen-addrsvp-spinner"></span>
+					<input type="number" id="tec-data-generator-addrsvp-event-id" min="1" step="1" class="small-text">
+					<label><?php esc_html_e( 'Quantity', 'tec-data-generator' ); ?> <input type="number" id="tec-data-generator-addrsvp-quantity" value="1" min="1" step="1" class="small-text"></label>
+					<button type="button" class="button" id="tec-data-generator-addrsvp-btn"><?php esc_html_e( 'Add RSVP tickets', 'tec-data-generator' ); ?></button>
+					<span class="spinner tec-data-generator-spinner" id="tec-data-generator-addrsvp-spinner"></span>
 				</td>
 			</tr>
 			<tr>
-				<th><label for="rsvp-loadgen-addtickets-event-id"><?php esc_html_e( 'Add paid tickets — Event ID', 'rsvp-migration-loadgen' ); ?></label></th>
+				<th><label for="tec-data-generator-addtickets-event-id"><?php esc_html_e( 'Add paid tickets — Event ID', 'tec-data-generator' ); ?></label></th>
 				<td>
-					<input type="number" id="rsvp-loadgen-addtickets-event-id" min="1" step="1" class="small-text">
-					<label><?php esc_html_e( 'Quantity', 'rsvp-migration-loadgen' ); ?> <input type="number" id="rsvp-loadgen-addtickets-quantity" value="1" min="1" step="1" class="small-text"></label>
-					<button type="button" class="button" id="rsvp-loadgen-addtickets-btn"><?php esc_html_e( 'Add paid tickets', 'rsvp-migration-loadgen' ); ?></button>
-					<span class="spinner rsvp-loadgen-spinner" id="rsvp-loadgen-addtickets-spinner"></span>
+					<input type="number" id="tec-data-generator-addtickets-event-id" min="1" step="1" class="small-text">
+					<label><?php esc_html_e( 'Quantity', 'tec-data-generator' ); ?> <input type="number" id="tec-data-generator-addtickets-quantity" value="1" min="1" step="1" class="small-text"></label>
+					<button type="button" class="button" id="tec-data-generator-addtickets-btn"><?php esc_html_e( 'Add paid tickets', 'tec-data-generator' ); ?></button>
+					<span class="spinner tec-data-generator-spinner" id="tec-data-generator-addtickets-spinner"></span>
 				</td>
 			</tr>
 			<tr>
-				<th><label for="rsvp-loadgen-addattendees-ticket-id"><?php esc_html_e( 'Add attendees — Ticket ID', 'rsvp-migration-loadgen' ); ?></label></th>
+				<th><label for="tec-data-generator-addattendees-ticket-id"><?php esc_html_e( 'Add attendees — Ticket ID', 'tec-data-generator' ); ?></label></th>
 				<td>
-					<input type="number" id="rsvp-loadgen-addattendees-ticket-id" min="1" step="1" class="small-text">
-					<label><?php esc_html_e( 'Quantity', 'rsvp-migration-loadgen' ); ?> <input type="number" id="rsvp-loadgen-addattendees-quantity" value="1" min="1" step="1" class="small-text"></label>
-					<button type="button" class="button" id="rsvp-loadgen-addattendees-btn"><?php esc_html_e( 'Add attendees', 'rsvp-migration-loadgen' ); ?></button>
-					<span class="spinner rsvp-loadgen-spinner" id="rsvp-loadgen-addattendees-spinner"></span>
+					<input type="number" id="tec-data-generator-addattendees-ticket-id" min="1" step="1" class="small-text">
+					<label><?php esc_html_e( 'Quantity', 'tec-data-generator' ); ?> <input type="number" id="tec-data-generator-addattendees-quantity" value="1" min="1" step="1" class="small-text"></label>
+					<button type="button" class="button" id="tec-data-generator-addattendees-btn"><?php esc_html_e( 'Add attendees', 'tec-data-generator' ); ?></button>
+					<span class="spinner tec-data-generator-spinner" id="tec-data-generator-addattendees-spinner"></span>
 				</td>
 			</tr>
 		</table>
-		<div id="rsvp-loadgen-addon-notice" class="notice inline rsvp-loadgen-notice" hidden><p></p></div>
+		<div id="tec-data-generator-addon-notice" class="notice inline tec-data-generator-notice" hidden><p></p></div>
 	</section>
 
-	<section class="rsvp-loadgen-section">
-		<h2><?php esc_html_e( 'Generate (advanced: plain, no orphaning)', 'rsvp-migration-loadgen' ); ?></h2>
+	<section class="tec-data-generator-section">
+		<h2><?php esc_html_e( 'Generate Events (containers only, no tickets)', 'tec-data-generator' ); ?></h2>
 		<table class="form-table">
 			<tr>
-				<th><label for="rsvp-loadgen-total"><?php esc_html_e( 'Total tickets', 'rsvp-migration-loadgen' ); ?></label></th>
-				<td><input type="number" id="rsvp-loadgen-total" value="5000" min="1" step="1" class="small-text"></td>
+				<th><label for="tec-data-generator-events-total"><?php esc_html_e( 'Total events', 'tec-data-generator' ); ?></label></th>
+				<td><input type="number" id="tec-data-generator-events-total" value="100" min="1" step="1" class="small-text"></td>
 			</tr>
 			<tr>
-				<th><label for="rsvp-loadgen-min-attendees"><?php esc_html_e( 'Min attendees per ticket', 'rsvp-migration-loadgen' ); ?></label></th>
-				<td><input type="number" id="rsvp-loadgen-min-attendees" value="1" min="1" step="1" class="small-text"></td>
-			</tr>
-			<tr>
-				<th><label for="rsvp-loadgen-max-attendees"><?php esc_html_e( 'Max attendees per ticket', 'rsvp-migration-loadgen' ); ?></label></th>
-				<td><input type="number" id="rsvp-loadgen-max-attendees" value="20" min="1" step="1" class="small-text"></td>
-			</tr>
-			<tr>
-				<th><?php esc_html_e( 'Attach', 'rsvp-migration-loadgen' ); ?></th>
+				<th><?php esc_html_e( 'Container', 'tec-data-generator' ); ?></th>
 				<td>
-					<label><input type="checkbox" id="rsvp-loadgen-with-venues"> <?php esc_html_e( 'Venues', 'rsvp-migration-loadgen' ); ?></label>
+					<label><input type="radio" name="tec-data-generator-events-container" value="event" checked> <?php esc_html_e( 'Event', 'tec-data-generator' ); ?></label>
 					&nbsp;&nbsp;
-					<label><input type="checkbox" id="rsvp-loadgen-with-organizers"> <?php esc_html_e( 'Organizers', 'rsvp-migration-loadgen' ); ?></label>
+					<label><input type="radio" name="tec-data-generator-events-container" value="page"> <?php esc_html_e( 'Page', 'tec-data-generator' ); ?></label>
+				</td>
+			</tr>
+			<tr>
+				<th><?php esc_html_e( 'Editor', 'tec-data-generator' ); ?></th>
+				<td>
+					<label><input type="radio" name="tec-data-generator-events-editor" value="classic" checked> <?php esc_html_e( 'Classic', 'tec-data-generator' ); ?></label>
+					&nbsp;&nbsp;
+					<label><input type="radio" name="tec-data-generator-events-editor" value="block"> <?php esc_html_e( 'Block', 'tec-data-generator' ); ?></label>
+				</td>
+			</tr>
+			<tr>
+				<th><?php esc_html_e( 'Attach', 'tec-data-generator' ); ?></th>
+				<td>
+					<label><input type="checkbox" id="tec-data-generator-events-with-venues"> <?php esc_html_e( 'Venues', 'tec-data-generator' ); ?></label>
+					&nbsp;&nbsp;
+					<label><input type="checkbox" id="tec-data-generator-events-with-organizers"> <?php esc_html_e( 'Organizers', 'tec-data-generator' ); ?></label>
+				</td>
+			</tr>
+			<tr>
+				<th><?php esc_html_e( 'Event types', 'tec-data-generator' ); ?></th>
+				<td>
+					<label><input type="checkbox" class="tec-data-generator-events-event-type" value="single" checked> <?php esc_html_e( 'Single', 'tec-data-generator' ); ?></label>
+					&nbsp;&nbsp;
+					<label title="<?php esc_attr_e( 'Requires Events Pro or ECP plugin', 'tec-data-generator' ); ?>"><input type="checkbox" class="tec-data-generator-events-event-type" value="recurring" <?php disabled( empty( $plugin_availability['has_events_pro'] ) ); ?>> <?php esc_html_e( 'Recurring', 'tec-data-generator' ); ?><?php if ( empty( $plugin_availability['has_events_pro'] ) ) : ?> (<?php esc_html_e( 'requires Events Pro or ECP', 'tec-data-generator' ); ?>)<?php endif; ?></label>
+					&nbsp;&nbsp;
+					<label title="<?php esc_attr_e( 'Requires ECP plugin', 'tec-data-generator' ); ?>"><input type="checkbox" class="tec-data-generator-events-event-type" value="virtual" <?php disabled( empty( $plugin_availability['has_ecp'] ) ); ?>> <?php esc_html_e( 'Virtual', 'tec-data-generator' ); ?><?php if ( empty( $plugin_availability['has_ecp'] ) ) : ?> (<?php esc_html_e( 'requires ECP', 'tec-data-generator' ); ?>)<?php endif; ?></label>
 				</td>
 			</tr>
 		</table>
-	
+
 		<p>
-			<button type="button" class="button button-primary" id="rsvp-loadgen-generate-btn">
-				<?php esc_html_e( 'Generate', 'rsvp-migration-loadgen' ); ?>
+			<button type="button" class="button button-primary" id="tec-data-generator-events-generate-btn">
+				<?php esc_html_e( 'Generate events', 'tec-data-generator' ); ?>
 			</button>
-			<button type="button" class="button" id="rsvp-loadgen-cleanup-btn">
-				<?php esc_html_e( 'Cleanup all generated data', 'rsvp-migration-loadgen' ); ?>
-			</button>
-			<span class="spinner rsvp-loadgen-spinner" id="rsvp-loadgen-generate-spinner"></span>
+			<span class="spinner tec-data-generator-spinner" id="tec-data-generator-events-spinner"></span>
 		</p>
-	
-		<div id="rsvp-loadgen-progress" class="rsvp-loadgen-progress" hidden>
-			<div class="rsvp-loadgen-progress-bar"><div class="rsvp-loadgen-progress-fill"></div></div>
-			<p class="rsvp-loadgen-progress-label"></p>
+
+		<div id="tec-data-generator-events-progress" class="tec-data-generator-progress" hidden>
+			<div class="tec-data-generator-progress-bar"><div class="tec-data-generator-progress-fill"></div></div>
+			<p class="tec-data-generator-progress-label"></p>
 		</div>
-		<div id="rsvp-loadgen-generate-notice" class="notice inline rsvp-loadgen-notice" hidden><p></p></div>
+		<div id="tec-data-generator-events-notice" class="notice inline tec-data-generator-notice" hidden><p></p></div>
+	</section>
+
+	<section class="tec-data-generator-section">
+		<h2><?php esc_html_e( 'Generate Tickets (with attendees)', 'tec-data-generator' ); ?></h2>
+		<p>
+			<?php esc_html_e( 'Creates fresh event/page containers with tickets attached — or leave "Existing event/page ID" filled to attach tickets to content already on this site instead.', 'tec-data-generator' ); ?>
+		</p>
+		<table class="form-table">
+			<tr>
+				<th><label for="tec-data-generator-tickets-total"><?php esc_html_e( 'Total containers (new only)', 'tec-data-generator' ); ?></label></th>
+				<td><input type="number" id="tec-data-generator-tickets-total" value="10" min="1" step="1" class="small-text"></td>
+			</tr>
+			<tr>
+				<th><label for="tec-data-generator-tickets-event-id"><?php esc_html_e( 'Existing event/page ID (optional)', 'tec-data-generator' ); ?></label></th>
+				<td>
+					<input type="number" id="tec-data-generator-tickets-event-id" min="1" step="1" class="small-text">
+					<label><?php esc_html_e( 'Quantity', 'tec-data-generator' ); ?> <input type="number" id="tec-data-generator-tickets-quantity" value="5" min="1" step="1" class="small-text"></label>
+				</td>
+			</tr>
+			<tr>
+				<th><?php esc_html_e( 'Container (new only)', 'tec-data-generator' ); ?></th>
+				<td>
+					<label><input type="radio" name="tec-data-generator-tickets-container" value="event" checked> <?php esc_html_e( 'Event', 'tec-data-generator' ); ?></label>
+					&nbsp;&nbsp;
+					<label><input type="radio" name="tec-data-generator-tickets-container" value="page"> <?php esc_html_e( 'Page', 'tec-data-generator' ); ?></label>
+				</td>
+			</tr>
+			<tr>
+				<th><?php esc_html_e( 'Ticket type', 'tec-data-generator' ); ?></th>
+				<td>
+					<label><input type="radio" name="tec-data-generator-tickets-ticket-type" value="rsvp" checked <?php disabled( empty( $plugin_availability['has_event_tickets'] ) ); ?>> <?php esc_html_e( 'RSVP', 'tec-data-generator' ); ?></label>
+					&nbsp;&nbsp;
+					<label><input type="radio" name="tec-data-generator-tickets-ticket-type" value="paid" <?php disabled( empty( $plugin_availability['has_event_tickets'] ) ); ?>> <?php esc_html_e( 'Paid', 'tec-data-generator' ); ?><?php if ( empty( $plugin_availability['has_event_tickets'] ) ) : ?> (<?php esc_html_e( 'requires Event Tickets', 'tec-data-generator' ); ?>)<?php endif; ?></label>
+				</td>
+			</tr>
+			<tr>
+				<th><?php esc_html_e( 'Tickets per container (new only)', 'tec-data-generator' ); ?></th>
+				<td>
+					<label><?php esc_html_e( 'Min', 'tec-data-generator' ); ?> <input type="number" id="tec-data-generator-tickets-min" value="1" min="1" step="1" class="small-text"></label>
+					<label><?php esc_html_e( 'Max', 'tec-data-generator' ); ?> <input type="number" id="tec-data-generator-tickets-max" value="1" min="1" step="1" class="small-text"></label>
+				</td>
+			</tr>
+			<tr>
+				<th><?php esc_html_e( 'Attendees per ticket', 'tec-data-generator' ); ?></th>
+				<td>
+					<label><?php esc_html_e( 'Min', 'tec-data-generator' ); ?> <input type="number" id="tec-data-generator-tickets-min-attendees" value="1" min="1" step="1" class="small-text"></label>
+					<label><?php esc_html_e( 'Max', 'tec-data-generator' ); ?> <input type="number" id="tec-data-generator-tickets-max-attendees" value="20" min="1" step="1" class="small-text"></label>
+				</td>
+			</tr>
+			<tr>
+				<th><?php esc_html_e( 'Editor (new only)', 'tec-data-generator' ); ?></th>
+				<td>
+					<label><input type="radio" name="tec-data-generator-tickets-editor" value="classic" checked> <?php esc_html_e( 'Classic', 'tec-data-generator' ); ?></label>
+					&nbsp;&nbsp;
+					<label><input type="radio" name="tec-data-generator-tickets-editor" value="block"> <?php esc_html_e( 'Block', 'tec-data-generator' ); ?></label>
+				</td>
+			</tr>
+			<tr>
+				<th><?php esc_html_e( 'Event types (new events only)', 'tec-data-generator' ); ?></th>
+				<td>
+					<label><input type="checkbox" class="tec-data-generator-tickets-event-type" value="single" checked> <?php esc_html_e( 'Single', 'tec-data-generator' ); ?></label>
+					&nbsp;&nbsp;
+					<label title="<?php esc_attr_e( 'Requires Events Pro or ECP plugin', 'tec-data-generator' ); ?>"><input type="checkbox" class="tec-data-generator-tickets-event-type" value="recurring" <?php disabled( empty( $plugin_availability['has_events_pro'] ) ); ?>> <?php esc_html_e( 'Recurring', 'tec-data-generator' ); ?></label>
+					&nbsp;&nbsp;
+					<label title="<?php esc_attr_e( 'Requires ECP plugin', 'tec-data-generator' ); ?>"><input type="checkbox" class="tec-data-generator-tickets-event-type" value="virtual" <?php disabled( empty( $plugin_availability['has_ecp'] ) ); ?>> <?php esc_html_e( 'Virtual', 'tec-data-generator' ); ?></label>
+				</td>
+			</tr>
+		</table>
+
+		<p>
+			<button type="button" class="button button-primary" id="tec-data-generator-tickets-generate-btn">
+				<?php esc_html_e( 'Generate tickets', 'tec-data-generator' ); ?>
+			</button>
+			<span class="spinner tec-data-generator-spinner" id="tec-data-generator-tickets-spinner"></span>
+		</p>
+
+		<div id="tec-data-generator-tickets-progress" class="tec-data-generator-progress" hidden>
+			<div class="tec-data-generator-progress-bar"><div class="tec-data-generator-progress-fill"></div></div>
+			<p class="tec-data-generator-progress-label"></p>
+		</div>
+		<div id="tec-data-generator-tickets-notice" class="notice inline tec-data-generator-notice" hidden><p></p></div>
 	</section>
 	
-	<section class="rsvp-loadgen-section">
-		<h2><?php esc_html_e( 'Migration controls', 'rsvp-migration-loadgen' ); ?></h2>
+	<section class="tec-data-generator-section tec-data-generator-danger">
+		<h2><?php esc_html_e( 'Cleanup', 'tec-data-generator' ); ?></h2>
 		<p>
-			<?php esc_html_e( 'Run or revert the rsvp-to-tc migration directly against the data above, so you can repeat the migrate/revert cycle without regenerating test data each time. Runs in the background via Shepherd/Action Scheduler once scheduled.', 'rsvp-migration-loadgen' ); ?>
+			<?php esc_html_e( 'Deletes everything this tool ever generated — events, pages, posts, venues, organizers, RSVP and paid tickets, and attendees across all runs (classic and block). Only posts tagged by this tool are touched; real site content is never deleted.', 'tec-data-generator' ); ?>
 		</p>
 		<p>
-			<?php esc_html_e( 'Status:', 'rsvp-migration-loadgen' ); ?>
-			<strong id="rsvp-loadgen-migration-status"><?php echo esc_html( $migration->get_status_label() ); ?></strong>
+			<button type="button" class="button button-link-delete button-large" id="tec-data-generator-cleanup-btn">
+				<?php esc_html_e( 'Cleanup all generated data', 'tec-data-generator' ); ?>
+			</button>
+			<span class="spinner tec-data-generator-spinner" id="tec-data-generator-generate-spinner"></span>
+		</p>
+		<div id="tec-data-generator-progress" class="tec-data-generator-progress" hidden>
+			<div class="tec-data-generator-progress-bar"><div class="tec-data-generator-progress-fill"></div></div>
+			<p class="tec-data-generator-progress-label"></p>
+		</div>
+		<div id="tec-data-generator-generate-notice" class="notice inline tec-data-generator-notice" hidden><p></p></div>
+	</section>
+
+	<section class="tec-data-generator-section">
+		<h2><?php esc_html_e( 'Migration controls', 'tec-data-generator' ); ?></h2>
+		<p>
+			<?php esc_html_e( 'Run or revert the rsvp-to-tc migration directly against the data above, so you can repeat the migrate/revert cycle without regenerating test data each time. Runs in the background via Shepherd/Action Scheduler once scheduled.', 'tec-data-generator' ); ?>
+		</p>
+		<p>
+			<?php esc_html_e( 'Status:', 'tec-data-generator' ); ?>
+			<strong id="tec-data-generator-migration-status"><?php echo esc_html( $migration->get_status_label() ); ?></strong>
 		</p>
 		<p>
 			<button
 				type="button"
 				class="button button-primary"
-				id="rsvp-loadgen-run-migration-btn"
+				id="tec-data-generator-run-migration-btn"
 				<?php disabled( ! $migration->can_run() ); ?>
 			>
-				<?php esc_html_e( 'Run migration (V1 → Tickets Commerce)', 'rsvp-migration-loadgen' ); ?>
+				<?php esc_html_e( 'Run migration (V1 → Tickets Commerce)', 'tec-data-generator' ); ?>
 			</button>
 			<button
 				type="button"
 				class="button"
-				id="rsvp-loadgen-revert-migration-btn"
+				id="tec-data-generator-revert-migration-btn"
 				<?php disabled( ! $migration->can_revert() ); ?>
 			>
-				<?php esc_html_e( 'Revert to V1', 'rsvp-migration-loadgen' ); ?>
+				<?php esc_html_e( 'Revert to V1', 'tec-data-generator' ); ?>
 			</button>
-			<span class="spinner rsvp-loadgen-spinner" id="rsvp-loadgen-migration-spinner"></span>
+			<span class="spinner tec-data-generator-spinner" id="tec-data-generator-migration-spinner"></span>
 		</p>
-		<div id="rsvp-loadgen-migration-notice" class="notice inline rsvp-loadgen-notice" hidden><p></p></div>
+		<div id="tec-data-generator-migration-notice" class="notice inline tec-data-generator-notice" hidden><p></p></div>
 	</section>
 </div>

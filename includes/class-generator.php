@@ -5,11 +5,22 @@
  * user-created data goes through.
  */
 
-namespace RSVP_Loadgen;
+namespace TEC\DataGenerator;
 
 class Generator {
 
 	const PAID_TICKET_TYPES = [ 'Standard', 'General', 'Basic', 'Student', 'Early Bird', 'VIP', 'Platinum' ];
+
+	/**
+	 * Virtual meeting platforms cycled randomly across generated virtual events.
+	 *
+	 * @var array<string,array{label:string,url:string}>
+	 */
+	const VIRTUAL_PLATFORMS = [
+		'zoom'        => [ 'label' => 'Zoom', 'url' => 'https://zoom.us/j/%s' ],
+		'google_meet' => [ 'label' => 'Google Meet', 'url' => 'https://meet.google.com/%s' ],
+		'teams'       => [ 'label' => 'Microsoft Teams', 'url' => 'https://teams.microsoft.com/l/meetup-join/%s' ],
+	];
 
 	/**
 	 * @var string
@@ -48,12 +59,30 @@ class Generator {
 	 *     @type int $max_rsvps_per_unit Maximum RSVP tickets per post. Default 1.
 	 *     @type bool $with_venues        Attach a random generated Venue to each Event unit. Default false.
 	 *     @type bool $with_organizers    Attach a random generated Organizer to each Event unit. Default false.
+	 *     @type string[] $event_types    Event subtypes for tribe_events units: single, recurring, virtual.
+	 *                                    Default [ 'single' ] (pre-existing behavior).
+	 *     @type string $ticket_type      Ticket attachment mode: rsvp, paid, or none. Default 'rsvp'.
+	 *     @type string $container        Container filter: mixed (even Event/Page/Post split, default),
+	 *                                    event (tribe_events only), or page (pages only).
+	 *     @type string $editor           Container editor: classic (plain post_content, default) or
+	 *                                    block (Gutenberg paragraph/heading markup). Tickets always use
+	 *                                    the production ticket_add() path regardless of editor.
 	 * }
+	 *
+	 * @throws \Exception When a requested event/ticket type needs a plugin that isn't active.
 	 *
 	 * @return array{created:int,post_ids:int[],ticket_ids:int[],attendee_ids:int[]}
 	 */
 	public function generate_batch( int $count, int $offset, array $options = [] ): array {
 		$this->options = $options;
+
+		// Fail fast with a clear message before creating anything, so a bad flag
+		// combination never leaves half a run behind.
+		$this->options['event_types'] = $this->normalize_event_types( $this->options['event_types'] ?? [ 'single' ] );
+		$this->options['ticket_type'] = $this->options['ticket_type'] ?? 'rsvp';
+		$this->options['container'] = $this->normalize_container( $this->options['container'] ?? 'mixed' );
+		$this->options['editor'] = $this->normalize_editor( $this->options['editor'] ?? 'classic' );
+		$this->validate_options();
 
 		return $this->run_with_performance_guards( function () use ( $count, $offset ) {
 			$post_ids     = [];
@@ -64,32 +93,27 @@ class Generator {
 				$seq       = $offset + $i;
 				$post_type = $this->post_type_for_sequence( $seq );
 
-				$post_id = 'tribe_events' === $post_type
-					? $this->create_event_post( $seq, $this->pick_venue(), $this->pick_organizer() )
-					: $this->create_page_or_post( $post_type, $seq );
+				try {
+					$post_id = 'tribe_events' === $post_type
+						? $this->create_event_by_type( $seq, $this->event_type_for_sequence( $seq, $this->options['event_types'] ) )
+						: $this->create_page_or_post( $post_type, $seq );
+				} catch ( \Exception $e ) {
+					// A dependency may have been deactivated mid-run (chunked AJAX/background
+					// jobs span many requests) — skip this unit with a warning instead of
+					// aborting the whole run.
+					error_log( sprintf( '[tec-data-generator] Skipping unit %d: %s', $seq, $e->getMessage() ) );
+					continue;
+				}
 
 				if ( ! $post_id ) {
 					continue;
 				}
 				$post_ids[] = $post_id;
 
-				$min_rsvps  = max( 1, (int) ( $this->options['min_rsvps_per_unit'] ?? 1 ) );
-				$max_rsvps  = max( $min_rsvps, (int) ( $this->options['max_rsvps_per_unit'] ?? 1 ) );
-				$rsvp_count = wp_rand( $min_rsvps, $max_rsvps );
+				$result = $this->attach_tickets( $post_id, $seq );
 
-				for ( $r = 0; $r < $rsvp_count; $r++ ) {
-					$ticket_id = $this->create_rsvp_ticket( $post_id, $seq, $r );
-
-					if ( ! $ticket_id ) {
-						continue;
-					}
-					$ticket_ids[] = $ticket_id;
-
-					$attendee_ids = array_merge(
-						$attendee_ids,
-						$this->create_attendees_for_ticket( $ticket_id, $post_id )
-					);
-				}
+				$ticket_ids   = array_merge( $ticket_ids, $result['ticket_ids'] );
+				$attendee_ids = array_merge( $attendee_ids, $result['attendee_ids'] );
 			}
 
 			return [
@@ -275,18 +299,282 @@ class Generator {
 	/**
 	 * Round-robins post types by global sequence, guaranteeing an even 3-way split
 	 * regardless of how many chunked calls it takes to reach the total count.
+	 * The `container` option restricts this: 'event' always returns tribe_events,
+	 * 'page' always returns page, 'mixed' keeps the legacy 3-way split.
 	 */
 	private function post_type_for_sequence( int $seq ): string {
+		$container = $this->options['container'] ?? 'mixed';
+
+		if ( 'event' === $container ) {
+			return 'tribe_events';
+		}
+
+		if ( 'page' === $container ) {
+			return 'page';
+		}
+
 		static $types = [ 'tribe_events', 'page', 'post' ];
 
 		return $types[ $seq % 3 ];
 	}
 
 	/**
-	 * Creates a `tribe_events` post via the-events-calendar's own repository ORM, so it has valid
-	 * start/end dates and behaves like a real event on the front end.
+	 * Normalizes the container filter to a known value.
+	 *
+	 * @throws \Exception On unknown container names.
+	 */
+	private function normalize_container( $container ): string {
+		$container = is_string( $container ) ? strtolower( trim( $container ) ) : 'mixed';
+
+		if ( ! in_array( $container, [ 'mixed', 'event', 'page' ], true ) ) {
+			throw new \Exception(
+				sprintf(
+					'Invalid container "%s". Use one of: mixed, event, page.',
+					$container
+				)
+			);
+		}
+
+		return $container;
+	}
+
+	/**
+	 * Normalizes the editor choice to a known value.
+	 *
+	 * @throws \Exception On unknown editor names.
+	 */
+	private function normalize_editor( $editor ): string {
+		$editor = is_string( $editor ) ? strtolower( trim( $editor ) ) : 'classic';
+
+		if ( ! in_array( $editor, [ 'classic', 'block' ], true ) ) {
+			throw new \Exception(
+				sprintf(
+					'Invalid editor "%s". Use one of: classic, block.',
+					$editor
+				)
+			);
+		}
+
+		return $editor;
+	}
+
+	/**
+	 * Builds container post_content for the requested editor. Classic is the legacy plain
+	 * text; block wraps the same words in real Gutenberg paragraph/heading markup so the
+	 * container opens in the block editor. Ticket creation is unaffected (always the
+	 * production ticket_add() path).
+	 */
+	private function container_content( string $plain, string $title ): string {
+		if ( ( $this->options['editor'] ?? 'classic' ) !== 'block' ) {
+			return $plain;
+		}
+
+		return sprintf(
+			"<!-- wp:heading --><h2>%s</h2><!-- /wp:heading -->\n<!-- wp:paragraph --><p>%s</p><!-- /wp:paragraph -->",
+			esc_html( $title ),
+			esc_html( $plain )
+		);
+	}
+
+	/**
+	 * Normalizes the event_types option to a non-empty list of known types.
+	 *
+	 * @param string|string[] $types
+	 *
+	 * @throws \Exception On unknown type names.
+	 *
+	 * @return string[]
+	 */
+	private function normalize_event_types( $types ): array {
+		if ( is_string( $types ) ) {
+			$types = explode( ',', $types );
+		}
+
+		$types = array_values( array_filter( array_map( 'trim', (array) $types ) ) );
+
+		if ( ! $types ) {
+			$types = [ 'single' ];
+		}
+
+		foreach ( $types as $type ) {
+			if ( ! in_array( $type, Plugin_Availability::ALLOWED_EVENT_TYPES, true ) ) {
+				throw new \Exception(
+					sprintf(
+						'Invalid event type "%s". Use one or more of: %s.',
+						$type,
+						implode( ', ', Plugin_Availability::ALLOWED_EVENT_TYPES )
+					)
+				);
+			}
+		}
+
+		return $types;
+	}
+
+	/**
+	 * Validates requested event/ticket types against active plugins. Runs before any
+	 * creation so misconfiguration never leaves partial data behind.
+	 *
+	 * @throws \Exception With a message naming the missing plugin.
+	 */
+	private function validate_options(): void {
+		foreach ( $this->options['event_types'] as $type ) {
+			if ( 'recurring' === $type && ! Plugin_Availability::has_events_pro_or_ecp() ) {
+				throw new \Exception( 'Recurring events require Events Pro or ECP plugin to be active.' );
+			}
+
+			if ( 'virtual' === $type && ! Plugin_Availability::has_ecp() ) {
+				throw new \Exception( 'Virtual events require ECP (Events Calendar Pro) plugin to be active.' );
+			}
+		}
+
+		$ticket_type = $this->options['ticket_type'];
+
+		if ( ! in_array( $ticket_type, Plugin_Availability::ALLOWED_TICKET_TYPES, true ) ) {
+			throw new \Exception(
+				sprintf(
+					'Invalid ticket type "%s". Use one of: %s.',
+					$ticket_type,
+					implode( ', ', Plugin_Availability::ALLOWED_TICKET_TYPES )
+				)
+			);
+		}
+
+		if ( in_array( $ticket_type, [ 'rsvp', 'paid' ], true ) && ! Plugin_Availability::has_event_tickets() ) {
+			throw new \Exception(
+				'rsvp' === $ticket_type
+					? 'RSVP tickets require Event Tickets plugin to be active.'
+					: 'Paid tickets require Event Tickets plugin to be active.'
+			);
+		}
+	}
+
+	/**
+	 * Deterministically maps a global sequence offset to one of the requested event types,
+	 * cycling through the list — so chunked runs keep a stable, reproducible distribution
+	 * regardless of chunk size.
+	 *
+	 * @param string[] $types
+	 */
+	public function event_type_for_sequence( int $seq, array $types ): string {
+		if ( ! $types ) {
+			return 'single';
+		}
+
+		return $types[ $seq % count( $types ) ];
+	}
+
+	/**
+	 * Dispatches to the matching create_*_event() method. Re-checks plugin availability
+	 * per unit so a deactivation mid-run fails that unit (caught by the caller) rather
+	 * than silently producing the wrong shape.
+	 *
+	 * @throws \Exception When the type's plugin is no longer active.
+	 */
+	private function create_event_by_type( int $seq, string $event_type ): int {
+		$venue_id     = $this->pick_venue();
+		$organizer_id = $this->pick_organizer();
+
+		switch ( $event_type ) {
+			case 'recurring':
+				if ( ! Plugin_Availability::has_events_pro_or_ecp() ) {
+					throw new \Exception( 'Recurring events require Events Pro or ECP plugin to be active.' );
+				}
+
+				return $this->create_recurring_event( $seq, $venue_id, $organizer_id );
+			case 'virtual':
+				if ( ! Plugin_Availability::has_ecp() ) {
+					throw new \Exception( 'Virtual events require ECP (Events Calendar Pro) plugin to be active.' );
+				}
+
+				return $this->create_virtual_event( $seq, $venue_id, $organizer_id );
+			default:
+				return $this->create_single_event( $seq, $venue_id, $organizer_id );
+		}
+	}
+
+	/**
+	 * Attaches tickets to a freshly created container post according to the ticket_type
+	 * option: 'rsvp' (existing V1 path), 'paid' (existing provider path), 'none' (skip).
+	 *
+	 * @return array{ticket_ids:int[],attendee_ids:int[]}
+	 */
+	private function attach_tickets( int $post_id, int $seq ): array {
+		$ticket_type = $this->options['ticket_type'] ?? 'rsvp';
+
+		if ( 'none' === $ticket_type ) {
+			return [ 'ticket_ids' => [], 'attendee_ids' => [] ];
+		}
+
+		$min_rsvps  = max( 1, (int) ( $this->options['min_rsvps_per_unit'] ?? 1 ) );
+		$max_rsvps  = max( $min_rsvps, (int) ( $this->options['max_rsvps_per_unit'] ?? 1 ) );
+		$ticket_count = wp_rand( $min_rsvps, $max_rsvps );
+
+		$ticket_ids   = [];
+		$attendee_ids = [];
+
+		for ( $r = 0; $r < $ticket_count; $r++ ) {
+			if ( 'paid' === $ticket_type ) {
+				$created = $this->add_paid_tickets( $post_id, 1 );
+
+				if ( ! $created ) {
+					// Fresh events default to the RSVP provider, which can't sell paid
+					// tickets — warn once per unit instead of failing the run.
+					error_log( sprintf( '[tec-data-generator] Skipping paid ticket for post %d: event provider does not support paid tickets.', $post_id ) );
+					continue;
+				}
+
+				foreach ( $created as $paid_ticket_id ) {
+					$ticket_ids[] = $paid_ticket_id;
+					$attendee_ids = array_merge(
+						$attendee_ids,
+						$this->add_attendees( $paid_ticket_id, $this->random_attendee_count() )
+					);
+				}
+
+				continue;
+			}
+
+			$ticket_id = $this->create_rsvp_ticket( $post_id, $seq, $r );
+
+			if ( ! $ticket_id ) {
+				continue;
+			}
+			$ticket_ids[] = $ticket_id;
+
+			$attendee_ids = array_merge(
+				$attendee_ids,
+				$this->create_attendees_for_ticket( $ticket_id, $post_id )
+			);
+		}
+
+		return [ 'ticket_ids' => $ticket_ids, 'attendee_ids' => $attendee_ids ];
+	}
+
+	/**
+	 * Random attendee count within the configured min/max range (shared by the paid-ticket
+	 * path; the RSVP path additionally caps at ticket capacity — see create_attendees_for_ticket()).
+	 */
+	private function random_attendee_count(): int {
+		$min = max( 1, (int) ( $this->options['min_attendees'] ?? 1 ) );
+		$max = max( $min, (int) ( $this->options['max_attendees'] ?? 20 ) );
+
+		return wp_rand( $min, $max );
+	}
+
+	/**
+	 * Legacy entry point kept for backward compatibility — delegates to create_single_event().
 	 */
 	private function create_event_post( int $seq, int $venue_id = 0, int $organizer_id = 0 ): int {
+		return $this->create_single_event( $seq, $venue_id, $organizer_id );
+	}
+
+	/**
+	 * Creates a plain single (non-recurring, non-virtual) `tribe_events` post via
+	 * The Events Calendar's own repository ORM, so it has valid start/end dates and
+	 * behaves like a real event on the front end.
+	 */
+	private function create_single_event( int $seq, int $venue_id = 0, int $organizer_id = 0 ): int {
 		if ( ! function_exists( 'tribe_events' ) ) {
 			return 0;
 		}
@@ -298,12 +586,14 @@ class Generator {
 		$venue_name     = $venue_id ? get_the_title( $venue_id ) : '';
 		$venue_city     = $venue_id ? (string) get_post_meta( $venue_id, '_VenueCity', true ) : '';
 
+		$title   = Data::random_event_title() . " (#{$seq})";
+		$plain   = Data::random_event_description( $organizer_name, $venue_name, $venue_city );
 		$args = [
-			'title'      => Data::random_event_title() . " (#{$seq})",
+			'title'      => $title,
 			'status'     => 'publish',
 			'start_date' => $start->format( 'Y-m-d H:i:s' ),
 			'end_date'   => $end->format( 'Y-m-d H:i:s' ),
-			'content'    => Data::random_event_description( $organizer_name, $venue_name, $venue_city ),
+			'content'    => $this->container_content( $plain, $title ),
 		];
 
 		if ( $venue_id ) {
@@ -320,7 +610,71 @@ class Generator {
 
 		if ( $post_id ) {
 			$this->tag_generated( $post_id, 'event' );
+			update_post_meta( $post_id, Data::EVENT_TYPE_META_KEY, 'single' );
+			update_post_meta( $post_id, Data::EDITOR_META_KEY, $this->options['editor'] ?? 'classic' );
 		}
+
+		return $post_id;
+	}
+
+	/**
+	 * Creates a recurring event: a normal event through the same repository ORM as
+	 * create_single_event(), plus the Events Pro recurrence rule meta (`_EventRecurrence`)
+	 * with a randomized daily/weekly/monthly pattern (1-30 occurrences, never infinite,
+	 * so generated data stays manageable). Recurring instances are materialized by Events
+	 * Pro itself from this rule — this tool only seeds the parent rule, not custom engine.
+	 */
+	private function create_recurring_event( int $seq, int $venue_id = 0, int $organizer_id = 0 ): int {
+		$post_id = $this->create_single_event( $seq, $venue_id, $organizer_id );
+
+		if ( ! $post_id ) {
+			return 0;
+		}
+
+		$patterns = [ 'daily', 'weekly', 'monthly' ];
+		$pattern  = $patterns[ array_rand( $patterns ) ];
+
+		$occurrences = [
+			'daily'   => wp_rand( 10, 30 ),
+			'weekly'  => wp_rand( 4, 12 ),
+			'monthly' => wp_rand( 2, 6 ),
+		][ $pattern ];
+
+		update_post_meta( $post_id, '_EventRecurrence', [
+			'rules' => [
+				[
+					'type'        => $pattern,
+					'end-count'   => $occurrences,
+					'EventStartDate' => get_post_meta( $post_id, '_EventStartDate', true ),
+				],
+			],
+		] );
+		update_post_meta( $post_id, Data::EVENT_TYPE_META_KEY, 'recurring' );
+
+		return $post_id;
+	}
+
+	/**
+	 * Creates a virtual event: a normal event through the same repository ORM as
+	 * create_single_event(), plus virtual meeting metadata (randomized platform + unique
+	 * meeting URL per event). Meta is attached post-hoc because ECP stores virtual details
+	 * as post meta — no special creation API needed.
+	 */
+	private function create_virtual_event( int $seq, int $venue_id = 0, int $organizer_id = 0 ): int {
+		$post_id = $this->create_single_event( $seq, $venue_id, $organizer_id );
+
+		if ( ! $post_id ) {
+			return 0;
+		}
+
+		$platforms = array_keys( self::VIRTUAL_PLATFORMS );
+		$platform  = $platforms[ array_rand( $platforms ) ];
+		$meeting_id = strtolower( wp_generate_password( 12, false, false ) );
+
+		update_post_meta( $post_id, '_tec_virtual_platform', $platform );
+		update_post_meta( $post_id, '_tec_virtual_meeting_url', sprintf( self::VIRTUAL_PLATFORMS[ $platform ]['url'], $meeting_id ) );
+		update_post_meta( $post_id, '_tec_virtual', 'yes' );
+		update_post_meta( $post_id, Data::EVENT_TYPE_META_KEY, 'virtual' );
 
 		return $post_id;
 	}
@@ -329,11 +683,13 @@ class Generator {
 	 * Creates a plain `page` or `post` container post.
 	 */
 	private function create_page_or_post( string $post_type, int $seq ): int {
+		$title   = sprintf( 'Loadgen %s %d', ucfirst( $post_type ), $seq );
+		$plain   = 'Generated by TEC Data Generator for migration stress testing.';
 		$post_id = wp_insert_post( [
 			'post_type'    => $post_type,
-			'post_title'   => sprintf( 'Loadgen %s %d', ucfirst( $post_type ), $seq ),
+			'post_title'   => $title,
 			'post_status'  => 'publish',
-			'post_content' => 'Generated by RSVP Migration Load Generator for migration stress testing.',
+			'post_content' => $this->container_content( $plain, $title ),
 		], true );
 
 		if ( is_wp_error( $post_id ) ) {
@@ -341,6 +697,7 @@ class Generator {
 		}
 
 		$this->tag_generated( $post_id, $post_type );
+		update_post_meta( $post_id, Data::EDITOR_META_KEY, $this->options['editor'] ?? 'classic' );
 
 		return (int) $post_id;
 	}

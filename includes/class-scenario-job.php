@@ -6,13 +6,13 @@
  * transient, so a long-running "edge" job can never expire mid-run).
  */
 
-namespace RSVP_Loadgen;
+namespace TEC\DataGenerator;
 
 class Scenario_Job {
 
-	const OPTION_KEY = 'rsvp_loadgen_scenario_job';
-	const AS_HOOK     = 'rsvp_loadgen_process_scenario_chunk';
-	const AS_GROUP    = 'rsvp-loadgen';
+	const OPTION_KEY = 'tec_data_generator_scenario_job';
+	const AS_HOOK     = 'tec_data_generator_process_scenario_chunk';
+	const AS_GROUP    = 'tec-data-generator';
 	const CHUNK_SIZE  = 100;
 
 	public function hook(): void {
@@ -52,14 +52,14 @@ class Scenario_Job {
 		if ( ! self::is_available() ) {
 			return [
 				'success' => false,
-				'message' => __( 'Action Scheduler is not available on this site. Run this via WP-CLI instead: wp rsvp-loadgen scenario --type=...', 'rsvp-migration-loadgen' ),
+				'message' => __( 'Action Scheduler is not available on this site. Run this via WP-CLI instead: wp tec-data-generator scenario --type=...', 'tec-data-generator' ),
 			];
 		}
 
 		if ( ! isset( Data::SCENARIOS[ $type ] ) ) {
 			return [
 				'success' => false,
-				'message' => __( 'Invalid scenario type.', 'rsvp-migration-loadgen' ),
+				'message' => __( 'Invalid scenario type.', 'tec-data-generator' ),
 			];
 		}
 
@@ -69,7 +69,7 @@ class Scenario_Job {
 			return [
 				'success' => false,
 				/* translators: %s: run ID of the scenario already in progress */
-				'message' => sprintf( __( 'A scenario is already running (run: %s). Wait for it to finish first.', 'rsvp-migration-loadgen' ), $job['run_id'] ?? '?' ),
+				'message' => sprintf( __( 'A scenario is already running (run: %s). Wait for it to finish first.', 'tec-data-generator' ), $job['run_id'] ?? '?' ),
 			];
 		}
 

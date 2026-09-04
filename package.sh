@@ -5,7 +5,7 @@ set -e
 
 PLUGIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_NAME="rsvp-migration-loadgen"
-VERSION=$(grep "define( 'RSVP_LOADGEN_VERSION'" "$PLUGIN_DIR/$PLUGIN_NAME.php" | grep -o "'[^']*'" | tail -1 | tr -d "'")
+VERSION=$(grep "define( 'TEC_DATA_GENERATOR_VERSION'" "$PLUGIN_DIR/$PLUGIN_NAME.php" | grep -o "'[^']*'" | tail -1 | tr -d "'")
 OUTPUT_FILE="$PLUGIN_DIR/${PLUGIN_NAME}-${VERSION}.zip"
 
 echo "Packaging $PLUGIN_NAME v$VERSION..."

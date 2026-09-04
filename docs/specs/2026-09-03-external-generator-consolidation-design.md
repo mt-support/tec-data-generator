@@ -117,9 +117,9 @@ they operate on an arbitrary existing event/ticket, not a freshly created one):*
 ### 3. `includes/class-cli.php` — new commands
 
 ```
-wp rsvp-loadgen add-rsvp <event_id> [--quantity=<n>] [--capacity=<n>] [--stock=<n>] [--unlimited-capacity]
-wp rsvp-loadgen add-tickets <event_id> [--quantity=<n>] [--capacity=<n>] [--stock=<n>] [--unlimited-capacity] [--shared-capacity]
-wp rsvp-loadgen add-attendees <ticket_id> [--quantity=<n>]
+wp tec-data-generator add-rsvp <event_id> [--quantity=<n>] [--capacity=<n>] [--stock=<n>] [--unlimited-capacity]
+wp tec-data-generator add-tickets <event_id> [--quantity=<n>] [--capacity=<n>] [--stock=<n>] [--unlimited-capacity] [--shared-capacity]
+wp tec-data-generator add-attendees <ticket_id> [--quantity=<n>]
 ```
 
 Each is a thin wrapper: validate the target ID exists and is the right post type, call the matching
@@ -177,11 +177,11 @@ operating directly on a caller-supplied event/ticket ID → same `tag_generated(
 No automated suite (per existing project convention). Manual smoke tests to add to `CLAUDE.md`:
 
 ```bash
-wp rsvp-loadgen generate --count=10 --with-venues --with-organizers   # spot-check attached venue/organizer
-wp rsvp-loadgen add-rsvp <event_id> --quantity=3
-wp rsvp-loadgen add-tickets <event_id> --quantity=3                    # confirm paid ticket, not RSVP
-wp rsvp-loadgen add-attendees <ticket_id> --quantity=5
-wp rsvp-loadgen cleanup                                                # confirm venues/organizers/paid tickets all removed
+wp tec-data-generator generate --count=10 --with-venues --with-organizers   # spot-check attached venue/organizer
+wp tec-data-generator add-rsvp <event_id> --quantity=3
+wp tec-data-generator add-tickets <event_id> --quantity=3                    # confirm paid ticket, not RSVP
+wp tec-data-generator add-attendees <ticket_id> --quantity=5
+wp tec-data-generator cleanup                                                # confirm venues/organizers/paid tickets all removed
 ```
 
 ## Explicitly out of scope (from the source repos, not being ported)

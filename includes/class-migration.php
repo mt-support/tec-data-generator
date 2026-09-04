@@ -6,7 +6,7 @@
  * hidden Migrations admin submenu.
  */
 
-namespace RSVP_Loadgen;
+namespace TEC\DataGenerator;
 
 use TEC\Common\StellarWP\Migrations\Enums\Operation;
 use TEC\Common\StellarWP\Migrations\Enums\Status;
@@ -35,7 +35,7 @@ class Migration {
 
 		return $migration
 			? $migration->get_status()->get_label()
-			: __( 'Migration framework unavailable', 'rsvp-migration-loadgen' );
+			: __( 'Migration framework unavailable', 'tec-data-generator' );
 	}
 
 	/**
@@ -93,7 +93,7 @@ class Migration {
 		return $this->schedule_full(
 			Operation::UP(),
 			'can_run',
-			__( 'Migration is not currently in a runnable state.', 'rsvp-migration-loadgen' )
+			__( 'Migration is not currently in a runnable state.', 'tec-data-generator' )
 		);
 	}
 
@@ -107,7 +107,7 @@ class Migration {
 		return $this->schedule_full(
 			Operation::DOWN(),
 			'can_revert',
-			__( 'Migration is not currently in a revertible state.', 'rsvp-migration-loadgen' )
+			__( 'Migration is not currently in a revertible state.', 'tec-data-generator' )
 		);
 	}
 
@@ -117,7 +117,7 @@ class Migration {
 		if ( ! $migration ) {
 			return [
 				'success' => false,
-				'message' => __( 'The migrations framework is not available.', 'rsvp-migration-loadgen' ),
+				'message' => __( 'The migrations framework is not available.', 'tec-data-generator' ),
 			];
 		}
 
@@ -137,7 +137,7 @@ class Migration {
 		return [
 			'success' => true,
 			/* translators: %s: migration operation label, e.g. "Up" or "Down" */
-			'message' => sprintf( __( 'Migration "%s" scheduled and running in the background.', 'rsvp-migration-loadgen' ), $operation->get_label() ),
+			'message' => sprintf( __( 'Migration "%s" scheduled and running in the background.', 'tec-data-generator' ), $operation->get_label() ),
 		];
 	}
 }

@@ -1,44 +1,59 @@
 ( function () {
 	'use strict';
 
-	var generateBtn = document.getElementById( 'rsvp-loadgen-generate-btn' );
-	var cleanupBtn = document.getElementById( 'rsvp-loadgen-cleanup-btn' );
-	var progressWrap = document.getElementById( 'rsvp-loadgen-progress' );
-	var progressFill = progressWrap ? progressWrap.querySelector( '.rsvp-loadgen-progress-fill' ) : null;
-	var progressLabel = progressWrap ? progressWrap.querySelector( '.rsvp-loadgen-progress-label' ) : null;
+	var generateBtn = document.getElementById( 'tec-data-generator-generate-btn' );
+	var cleanupBtn = document.getElementById( 'tec-data-generator-cleanup-btn' );
+	var progressWrap = document.getElementById( 'tec-data-generator-progress' );
+	var progressFill = progressWrap ? progressWrap.querySelector( '.tec-data-generator-progress-fill' ) : null;
+	var progressLabel = progressWrap ? progressWrap.querySelector( '.tec-data-generator-progress-label' ) : null;
 
-	var generateSpinner = document.getElementById( 'rsvp-loadgen-generate-spinner' );
-	var generateNoticeEl = document.getElementById( 'rsvp-loadgen-generate-notice' );
+	var generateSpinner = document.getElementById( 'tec-data-generator-generate-spinner' );
+	var generateNoticeEl = document.getElementById( 'tec-data-generator-generate-notice' );
 
-	var scenarioTypeSelect = document.getElementById( 'rsvp-loadgen-scenario-type' );
-	var scenarioBtn = document.getElementById( 'rsvp-loadgen-scenario-btn' );
-	var scenarioSpinner = document.getElementById( 'rsvp-loadgen-scenario-spinner' );
-	var scenarioProgress = document.getElementById( 'rsvp-loadgen-scenario-progress' );
-	var scenarioProgressFill = scenarioProgress ? scenarioProgress.querySelector( '.rsvp-loadgen-progress-fill' ) : null;
-	var scenarioProgressLabel = scenarioProgress ? scenarioProgress.querySelector( '.rsvp-loadgen-progress-label' ) : null;
-	var scenarioNoticeEl = document.getElementById( 'rsvp-loadgen-scenario-notice' );
+	// Split sections: Generate Events (containers only) and Generate Tickets (with attendees).
+	var eventsBtn = document.getElementById( 'tec-data-generator-events-generate-btn' );
+	var eventsSpinner = document.getElementById( 'tec-data-generator-events-spinner' );
+	var eventsProgress = document.getElementById( 'tec-data-generator-events-progress' );
+	var eventsProgressFill = eventsProgress ? eventsProgress.querySelector( '.tec-data-generator-progress-fill' ) : null;
+	var eventsProgressLabel = eventsProgress ? eventsProgress.querySelector( '.tec-data-generator-progress-label' ) : null;
+	var eventsNoticeEl = document.getElementById( 'tec-data-generator-events-notice' );
+
+	var ticketsBtn = document.getElementById( 'tec-data-generator-tickets-generate-btn' );
+	var ticketsSpinner = document.getElementById( 'tec-data-generator-tickets-spinner' );
+	var ticketsProgress = document.getElementById( 'tec-data-generator-tickets-progress' );
+	var ticketsProgressFill = ticketsProgress ? ticketsProgress.querySelector( '.tec-data-generator-progress-fill' ) : null;
+	var ticketsProgressLabel = ticketsProgress ? ticketsProgress.querySelector( '.tec-data-generator-progress-label' ) : null;
+	var ticketsNoticeEl = document.getElementById( 'tec-data-generator-tickets-notice' );
+
+	var scenarioTypeSelect = document.getElementById( 'tec-data-generator-scenario-type' );
+	var scenarioBtn = document.getElementById( 'tec-data-generator-scenario-btn' );
+	var scenarioSpinner = document.getElementById( 'tec-data-generator-scenario-spinner' );
+	var scenarioProgress = document.getElementById( 'tec-data-generator-scenario-progress' );
+	var scenarioProgressFill = scenarioProgress ? scenarioProgress.querySelector( '.tec-data-generator-progress-fill' ) : null;
+	var scenarioProgressLabel = scenarioProgress ? scenarioProgress.querySelector( '.tec-data-generator-progress-label' ) : null;
+	var scenarioNoticeEl = document.getElementById( 'tec-data-generator-scenario-notice' );
 	var scenarioPollTimer = null;
 
-	var runMigrationBtn = document.getElementById( 'rsvp-loadgen-run-migration-btn' );
-	var revertMigrationBtn = document.getElementById( 'rsvp-loadgen-revert-migration-btn' );
-	var migrationStatusEl = document.getElementById( 'rsvp-loadgen-migration-status' );
-	var migrationSpinner = document.getElementById( 'rsvp-loadgen-migration-spinner' );
-	var migrationNoticeEl = document.getElementById( 'rsvp-loadgen-migration-notice' );
+	var runMigrationBtn = document.getElementById( 'tec-data-generator-run-migration-btn' );
+	var revertMigrationBtn = document.getElementById( 'tec-data-generator-revert-migration-btn' );
+	var migrationStatusEl = document.getElementById( 'tec-data-generator-migration-status' );
+	var migrationSpinner = document.getElementById( 'tec-data-generator-migration-spinner' );
+	var migrationNoticeEl = document.getElementById( 'tec-data-generator-migration-notice' );
 	var migrationPollTimer = null;
 
-	var scenarioWithVenuesEl = document.getElementById( 'rsvp-loadgen-scenario-with-venues' );
-	var scenarioWithOrganizersEl = document.getElementById( 'rsvp-loadgen-scenario-with-organizers' );
-	var withVenuesEl = document.getElementById( 'rsvp-loadgen-with-venues' );
-	var withOrganizersEl = document.getElementById( 'rsvp-loadgen-with-organizers' );
+	var scenarioWithVenuesEl = document.getElementById( 'tec-data-generator-scenario-with-venues' );
+	var scenarioWithOrganizersEl = document.getElementById( 'tec-data-generator-scenario-with-organizers' );
+	var withVenuesEl = document.getElementById( 'tec-data-generator-with-venues' );
+	var withOrganizersEl = document.getElementById( 'tec-data-generator-with-organizers' );
 
-	var addonNoticeEl = document.getElementById( 'rsvp-loadgen-addon-notice' );
+	var addonNoticeEl = document.getElementById( 'tec-data-generator-addon-notice' );
 
-	var addRsvpBtn = document.getElementById( 'rsvp-loadgen-addrsvp-btn' );
-	var addRsvpSpinner = document.getElementById( 'rsvp-loadgen-addrsvp-spinner' );
-	var addTicketsBtn = document.getElementById( 'rsvp-loadgen-addtickets-btn' );
-	var addTicketsSpinner = document.getElementById( 'rsvp-loadgen-addtickets-spinner' );
-	var addAttendeesBtn = document.getElementById( 'rsvp-loadgen-addattendees-btn' );
-	var addAttendeesSpinner = document.getElementById( 'rsvp-loadgen-addattendees-spinner' );
+	var addRsvpBtn = document.getElementById( 'tec-data-generator-addrsvp-btn' );
+	var addRsvpSpinner = document.getElementById( 'tec-data-generator-addrsvp-spinner' );
+	var addTicketsBtn = document.getElementById( 'tec-data-generator-addtickets-btn' );
+	var addTicketsSpinner = document.getElementById( 'tec-data-generator-addtickets-spinner' );
+	var addAttendeesBtn = document.getElementById( 'tec-data-generator-addattendees-btn' );
+	var addAttendeesSpinner = document.getElementById( 'tec-data-generator-addattendees-spinner' );
 
 	// Toggles WP admin's own `.spinner` (built into wp-admin core CSS, no extra asset needed).
 	function setSpinner( el, active ) {
@@ -59,7 +74,7 @@
 			el.hidden = true;
 			return;
 		}
-		el.className = 'notice inline rsvp-loadgen-notice notice-' + type;
+		el.className = 'notice inline tec-data-generator-notice notice-' + type;
 		var p = el.querySelector( 'p' );
 		if ( p ) {
 			p.textContent = message;
@@ -70,10 +85,10 @@
 	function postAjax( action, extraParams ) {
 		var body = new URLSearchParams( Object.assign( {
 			action: action,
-			nonce: RSVPLoadgen.nonce,
+			nonce: TecDataGenerator.nonce,
 		}, extraParams || {} ) );
 
-		return fetch( RSVPLoadgen.ajaxUrl, {
+		return fetch( TecDataGenerator.ajaxUrl, {
 			method: 'POST',
 			credentials: 'same-origin',
 			headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -98,12 +113,12 @@
 	}
 
 	function refreshCounts() {
-		postAjax( RSVPLoadgen.actions.status ).then( function ( res ) {
+		postAjax( TecDataGenerator.actions.status ).then( function ( res ) {
 			if ( ! res || ! res.success ) {
 				return;
 			}
 			Object.keys( res.data ).forEach( function ( kind ) {
-				var cell = document.querySelector( '#rsvp-loadgen-counts td[data-kind="' + kind + '"]' );
+				var cell = document.querySelector( '#tec-data-generator-counts td[data-kind="' + kind + '"]' );
 				if ( cell ) {
 					cell.textContent = res.data[ kind ];
 				}
@@ -111,22 +126,25 @@
 		} );
 	}
 
-	function runGenerateLoop( total, minAttendees, maxAttendees, withVenues, withOrganizers ) {
+	function runGenerateLoop( total, minAttendees, maxAttendees, withVenues, withOrganizers, eventTypes, ticketType ) {
 		var runId = null;
 
 		function step() {
-			return postAjax( RSVPLoadgen.actions.generate, {
+			return postAjax( TecDataGenerator.actions.generate, {
 				total: total,
 				min_attendees: minAttendees,
 				max_attendees: maxAttendees,
 				with_venues: withVenues,
 				with_organizers: withOrganizers,
-				chunk_size: RSVPLoadgen.chunkSize,
+				event_types: ( eventTypes && eventTypes.length ? eventTypes : [ 'single' ] ).join( ',' ),
+				ticket_type: ticketType || 'rsvp',
+				chunk_size: TecDataGenerator.chunkSize,
 				run_id: runId || '',
 			} ).then( function ( res ) {
 				if ( ! res || ! res.success ) {
+					var message = ( res && res.data && res.data.message ) || 'Error generating data. See console/logs for details.';
 					showProgress( 0, total, '' );
-					setNotice( generateNoticeEl, 'error', 'Error generating data. See console/logs for details.' );
+					setNotice( generateNoticeEl, 'error', message );
 					return;
 				}
 
@@ -138,6 +156,89 @@
 				}
 
 				setNotice( generateNoticeEl, 'success', 'Generated ' + res.data.total + ' tickets (run: ' + runId + ').' );
+			} );
+		}
+
+		return step().then( refreshCounts );
+	}
+
+	function showSectionProgress( wrap, fill, label, done, total, text ) {
+		if ( ! wrap ) {
+			return;
+		}
+		wrap.hidden = false;
+		var pct = total > 0 ? Math.min( 100, Math.round( ( done / total ) * 100 ) ) : 0;
+		if ( fill ) {
+			fill.style.width = pct + '%';
+		}
+		if ( label ) {
+			label.textContent = text;
+		}
+	}
+
+	function runEventsLoop( total, container, editor, withVenues, withOrganizers, eventTypes ) {
+		var runId = null;
+
+		function step() {
+			return postAjax( TecDataGenerator.actions.generateEvents, {
+				total: total,
+				container: container,
+				editor: editor,
+				with_venues: withVenues,
+				with_organizers: withOrganizers,
+				event_types: ( eventTypes && eventTypes.length ? eventTypes : [ 'single' ] ).join( ',' ),
+				chunk_size: TecDataGenerator.chunkSize,
+				run_id: runId || '',
+			} ).then( function ( res ) {
+				if ( ! res || ! res.success ) {
+					var message = ( res && res.data && res.data.message ) || 'Error generating events. See console/logs for details.';
+					setNotice( eventsNoticeEl, 'error', message );
+					return;
+				}
+
+				runId = res.data.run_id;
+				showSectionProgress( eventsProgress, eventsProgressFill, eventsProgressLabel, res.data.done, res.data.total, res.data.done + ' / ' + res.data.total + ' events generated' );
+
+				if ( ! res.data.finished ) {
+					return step();
+				}
+
+				setNotice( eventsNoticeEl, 'success', 'Generated ' + res.data.total + ' events (run: ' + runId + ').' );
+			} );
+		}
+
+		return step().then( refreshCounts );
+	}
+
+	function runTicketsLoop( params ) {
+		var runId = null;
+
+		function step() {
+			var body = Object.assign( {
+				chunk_size: TecDataGenerator.chunkSize,
+				run_id: runId || '',
+			}, params );
+
+			return postAjax( TecDataGenerator.actions.generateTickets, body ).then( function ( res ) {
+				if ( ! res || ! res.success ) {
+					var message = ( res && res.data && res.data.message ) || 'Error generating tickets. See console/logs for details.';
+					setNotice( ticketsNoticeEl, 'error', message );
+					return;
+				}
+
+				if ( res.data.existing_event ) {
+					setNotice( ticketsNoticeEl, 'success', 'Added ' + res.data.tickets + ' ticket(s) with ' + res.data.attendees + ' attendee(s) (run: ' + res.data.run_id + ').' );
+					return;
+				}
+
+				runId = res.data.run_id;
+				showSectionProgress( ticketsProgress, ticketsProgressFill, ticketsProgressLabel, res.data.done, res.data.total, res.data.done + ' / ' + res.data.total + ' containers generated' );
+
+				if ( ! res.data.finished ) {
+					return step();
+				}
+
+				setNotice( ticketsNoticeEl, 'success', 'Generated tickets on ' + res.data.total + ' containers (run: ' + runId + ').' );
 			} );
 		}
 
@@ -203,7 +304,7 @@
 	}
 
 	function pollScenarioStatus() {
-		return postAjax( RSVPLoadgen.actions.scenarioStatus ).then( function ( res ) {
+		return postAjax( TecDataGenerator.actions.scenarioStatus ).then( function ( res ) {
 			if ( ! res || ! res.success ) {
 				return null;
 			}
@@ -239,7 +340,7 @@
 			setSpinner( scenarioSpinner, true );
 			setNotice( scenarioNoticeEl, 'info', '' );
 
-			postAjax( RSVPLoadgen.actions.scheduleScenario, {
+			postAjax( TecDataGenerator.actions.scheduleScenario, {
 				type: type,
 				with_venues: scenarioWithVenuesEl && scenarioWithVenuesEl.checked ? 1 : 0,
 				with_organizers: scenarioWithOrganizersEl && scenarioWithOrganizersEl.checked ? 1 : 0,
@@ -271,8 +372,8 @@
 
 	function runCleanupLoop() {
 		function step() {
-			return postAjax( RSVPLoadgen.actions.cleanup, {
-				chunk_size: RSVPLoadgen.chunkSize,
+			return postAjax( TecDataGenerator.actions.cleanup, {
+				chunk_size: TecDataGenerator.chunkSize,
 			} ).then( function ( res ) {
 				if ( ! res || ! res.success ) {
 					showProgress( 0, 0, '' );
@@ -294,13 +395,116 @@
 		return step().then( refreshCounts );
 	}
 
+	if ( eventsBtn ) {
+		eventsBtn.addEventListener( 'click', function () {
+			var total = parseInt( document.getElementById( 'tec-data-generator-events-total' ).value, 10 ) || 100;
+			var containerEl = document.querySelector( 'input[name="tec-data-generator-events-container"]:checked' );
+			var container = containerEl ? containerEl.value : 'event';
+			var editorEl = document.querySelector( 'input[name="tec-data-generator-events-editor"]:checked' );
+			var editor = editorEl ? editorEl.value : 'classic';
+			var withVenues = document.getElementById( 'tec-data-generator-events-with-venues' );
+			var withOrganizers = document.getElementById( 'tec-data-generator-events-with-organizers' );
+			var eventTypes = Array.prototype.map.call(
+				document.querySelectorAll( '.tec-data-generator-events-event-type:checked:not(:disabled)' ),
+				function ( el ) { return el.value; }
+			);
+
+			eventsBtn.disabled = true;
+			if ( cleanupBtn ) {
+				cleanupBtn.disabled = true;
+			}
+			if ( ticketsBtn ) {
+				ticketsBtn.disabled = true;
+			}
+			setSpinner( eventsSpinner, true );
+			setNotice( eventsNoticeEl, 'info', '' );
+
+			runEventsLoop(
+				total,
+				container,
+				editor,
+				withVenues && withVenues.checked ? 1 : 0,
+				withOrganizers && withOrganizers.checked ? 1 : 0,
+				eventTypes
+			).finally( function () {
+				eventsBtn.disabled = false;
+				if ( cleanupBtn ) {
+					cleanupBtn.disabled = false;
+				}
+				if ( ticketsBtn ) {
+					ticketsBtn.disabled = false;
+				}
+				setSpinner( eventsSpinner, false );
+			} );
+		} );
+	}
+
+	if ( ticketsBtn ) {
+		ticketsBtn.addEventListener( 'click', function () {
+			var eventId = parseInt( document.getElementById( 'tec-data-generator-tickets-event-id' ).value, 10 ) || 0;
+			var containerEl = document.querySelector( 'input[name="tec-data-generator-tickets-container"]:checked' );
+			var container = containerEl ? containerEl.value : 'event';
+			var ticketTypeEl = document.querySelector( 'input[name="tec-data-generator-tickets-ticket-type"]:checked:not(:disabled)' );
+			var ticketType = ticketTypeEl ? ticketTypeEl.value : 'rsvp';
+			var editorEl = document.querySelector( 'input[name="tec-data-generator-tickets-editor"]:checked' );
+			var editor = editorEl ? editorEl.value : 'classic';
+			var eventTypes = Array.prototype.map.call(
+				document.querySelectorAll( '.tec-data-generator-tickets-event-type:checked:not(:disabled)' ),
+				function ( el ) { return el.value; }
+			);
+
+			var params;
+
+			if ( eventId ) {
+				var quantity = parseInt( document.getElementById( 'tec-data-generator-tickets-quantity' ).value, 10 ) || 1;
+				var minA = parseInt( document.getElementById( 'tec-data-generator-tickets-min-attendees' ).value, 10 ) || 1;
+				var maxA = parseInt( document.getElementById( 'tec-data-generator-tickets-max-attendees' ).value, 10 ) || 20;
+				params = { event_id: eventId, quantity: quantity, ticket_type: ticketType, min_attendees: minA, max_attendees: maxA };
+			} else {
+				var total = parseInt( document.getElementById( 'tec-data-generator-tickets-total' ).value, 10 ) || 10;
+				var minT = parseInt( document.getElementById( 'tec-data-generator-tickets-min' ).value, 10 ) || 1;
+				var maxT = parseInt( document.getElementById( 'tec-data-generator-tickets-max' ).value, 10 ) || 1;
+				var minAtt = parseInt( document.getElementById( 'tec-data-generator-tickets-min-attendees' ).value, 10 ) || 1;
+				var maxAtt = parseInt( document.getElementById( 'tec-data-generator-tickets-max-attendees' ).value, 10 ) || 20;
+				params = { total: total, container: container, editor: editor, ticket_type: ticketType, min_tickets: minT, max_tickets: maxT, min_attendees: minAtt, max_attendees: maxAtt, event_types: eventTypes.join( ',' ) };
+			}
+
+			ticketsBtn.disabled = true;
+			if ( eventsBtn ) {
+				eventsBtn.disabled = true;
+			}
+			if ( cleanupBtn ) {
+				cleanupBtn.disabled = true;
+			}
+			setSpinner( ticketsSpinner, true );
+			setNotice( ticketsNoticeEl, 'info', '' );
+
+			runTicketsLoop( params ).finally( function () {
+				ticketsBtn.disabled = false;
+				if ( eventsBtn ) {
+					eventsBtn.disabled = false;
+				}
+				if ( cleanupBtn ) {
+					cleanupBtn.disabled = false;
+				}
+				setSpinner( ticketsSpinner, false );
+			} );
+		} );
+	}
+
 	if ( generateBtn ) {
 		generateBtn.addEventListener( 'click', function () {
-			var total = parseInt( document.getElementById( 'rsvp-loadgen-total' ).value, 10 ) || 5000;
-			var minAttendees = parseInt( document.getElementById( 'rsvp-loadgen-min-attendees' ).value, 10 ) || 1;
-			var maxAttendees = parseInt( document.getElementById( 'rsvp-loadgen-max-attendees' ).value, 10 ) || 20;
+			var total = parseInt( document.getElementById( 'tec-data-generator-total' ).value, 10 ) || 5000;
+			var minAttendees = parseInt( document.getElementById( 'tec-data-generator-min-attendees' ).value, 10 ) || 1;
+			var maxAttendees = parseInt( document.getElementById( 'tec-data-generator-max-attendees' ).value, 10 ) || 20;
 			var withVenues = withVenuesEl && withVenuesEl.checked ? 1 : 0;
 			var withOrganizers = withOrganizersEl && withOrganizersEl.checked ? 1 : 0;
+			var eventTypes = Array.prototype.map.call(
+				document.querySelectorAll( '.tec-data-generator-event-type:checked:not(:disabled)' ),
+				function ( el ) { return el.value; }
+			);
+			var ticketTypeEl = document.querySelector( 'input[name="tec-data-generator-ticket-type"]:checked:not(:disabled)' );
+			var ticketType = ticketTypeEl ? ticketTypeEl.value : 'rsvp';
 
 			generateBtn.disabled = true;
 			cleanupBtn.disabled = true;
@@ -310,7 +514,7 @@
 			setSpinner( generateSpinner, true );
 			setNotice( generateNoticeEl, 'info', '' );
 
-			runGenerateLoop( total, minAttendees, maxAttendees, withVenues, withOrganizers ).finally( function () {
+			runGenerateLoop( total, minAttendees, maxAttendees, withVenues, withOrganizers, eventTypes, ticketType ).finally( function () {
 				generateBtn.disabled = false;
 				cleanupBtn.disabled = false;
 				if ( scenarioBtn ) {
@@ -327,19 +531,35 @@
 				return;
 			}
 
-			generateBtn.disabled = true;
+			if ( generateBtn ) {
+				generateBtn.disabled = true;
+			}
 			cleanupBtn.disabled = true;
 			if ( scenarioBtn ) {
 				scenarioBtn.disabled = true;
+			}
+			if ( eventsBtn ) {
+				eventsBtn.disabled = true;
+			}
+			if ( ticketsBtn ) {
+				ticketsBtn.disabled = true;
 			}
 			setSpinner( generateSpinner, true );
 			setNotice( generateNoticeEl, 'info', '' );
 
 			runCleanupLoop().finally( function () {
-				generateBtn.disabled = false;
+				if ( generateBtn ) {
+					generateBtn.disabled = false;
+				}
 				cleanupBtn.disabled = false;
 				if ( scenarioBtn ) {
 					scenarioBtn.disabled = false;
+				}
+				if ( eventsBtn ) {
+					eventsBtn.disabled = false;
+				}
+				if ( ticketsBtn ) {
+					ticketsBtn.disabled = false;
 				}
 				setSpinner( generateSpinner, false );
 			} );
@@ -356,7 +576,7 @@
 	}
 
 	function refreshMigrationStatus() {
-		return postAjax( RSVPLoadgen.actions.migrationStatus ).then( function ( res ) {
+		return postAjax( TecDataGenerator.actions.migrationStatus ).then( function ( res ) {
 			if ( ! res || ! res.success ) {
 				return;
 			}
@@ -447,14 +667,14 @@
 
 	if ( runMigrationBtn ) {
 		runMigrationBtn.addEventListener( 'click', function () {
-			runMigrationAction( RSVPLoadgen.actions.runMigration, null );
+			runMigrationAction( TecDataGenerator.actions.runMigration, null );
 		} );
 	}
 
 	if ( revertMigrationBtn ) {
 		revertMigrationBtn.addEventListener( 'click', function () {
 			runMigrationAction(
-				RSVPLoadgen.actions.revertMigration,
+				TecDataGenerator.actions.revertMigration,
 				'Revert the rsvp-to-tc migration back to legacy V1 RSVP data?'
 			);
 		} );
@@ -482,10 +702,10 @@
 
 	if ( addRsvpBtn ) {
 		addRsvpBtn.addEventListener( 'click', function () {
-			var eventId = parseInt( document.getElementById( 'rsvp-loadgen-addrsvp-event-id' ).value, 10 ) || 0;
-			var quantity = parseInt( document.getElementById( 'rsvp-loadgen-addrsvp-quantity' ).value, 10 ) || 1;
+			var eventId = parseInt( document.getElementById( 'tec-data-generator-addrsvp-event-id' ).value, 10 ) || 0;
+			var quantity = parseInt( document.getElementById( 'tec-data-generator-addrsvp-quantity' ).value, 10 ) || 1;
 
-			runAddonAction( addRsvpBtn, addRsvpSpinner, RSVPLoadgen.actions.addRsvp, { event_id: eventId, quantity: quantity }, function ( data ) {
+			runAddonAction( addRsvpBtn, addRsvpSpinner, TecDataGenerator.actions.addRsvp, { event_id: eventId, quantity: quantity }, function ( data ) {
 				return 'Added ' + data.created + ' RSVP ticket(s) to event ' + eventId + ' (run: ' + data.run_id + ').';
 			} );
 		} );
@@ -493,10 +713,10 @@
 
 	if ( addTicketsBtn ) {
 		addTicketsBtn.addEventListener( 'click', function () {
-			var eventId = parseInt( document.getElementById( 'rsvp-loadgen-addtickets-event-id' ).value, 10 ) || 0;
-			var quantity = parseInt( document.getElementById( 'rsvp-loadgen-addtickets-quantity' ).value, 10 ) || 1;
+			var eventId = parseInt( document.getElementById( 'tec-data-generator-addtickets-event-id' ).value, 10 ) || 0;
+			var quantity = parseInt( document.getElementById( 'tec-data-generator-addtickets-quantity' ).value, 10 ) || 1;
 
-			runAddonAction( addTicketsBtn, addTicketsSpinner, RSVPLoadgen.actions.addTickets, { event_id: eventId, quantity: quantity }, function ( data ) {
+			runAddonAction( addTicketsBtn, addTicketsSpinner, TecDataGenerator.actions.addTickets, { event_id: eventId, quantity: quantity }, function ( data ) {
 				return 'Added ' + data.created + ' paid ticket(s) to event ' + eventId + ' (run: ' + data.run_id + ').';
 			} );
 		} );
@@ -504,10 +724,10 @@
 
 	if ( addAttendeesBtn ) {
 		addAttendeesBtn.addEventListener( 'click', function () {
-			var ticketId = parseInt( document.getElementById( 'rsvp-loadgen-addattendees-ticket-id' ).value, 10 ) || 0;
-			var quantity = parseInt( document.getElementById( 'rsvp-loadgen-addattendees-quantity' ).value, 10 ) || 1;
+			var ticketId = parseInt( document.getElementById( 'tec-data-generator-addattendees-ticket-id' ).value, 10 ) || 0;
+			var quantity = parseInt( document.getElementById( 'tec-data-generator-addattendees-quantity' ).value, 10 ) || 1;
 
-			runAddonAction( addAttendeesBtn, addAttendeesSpinner, RSVPLoadgen.actions.addAttendees, { ticket_id: ticketId, quantity: quantity }, function ( data ) {
+			runAddonAction( addAttendeesBtn, addAttendeesSpinner, TecDataGenerator.actions.addAttendees, { ticket_id: ticketId, quantity: quantity }, function ( data ) {
 				return 'Added ' + data.created + ' attendee(s) to ticket ' + ticketId + ' (run: ' + data.run_id + ').';
 			} );
 		} );

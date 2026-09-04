@@ -1,40 +1,61 @@
-.rsvp-loadgen-progress {
+.tec-data-generator-progress {
 	max-width: 480px;
-	margin-top: 16px;
+	margin-top: var(--tec-spacer-3, 16px);
 }
 
-.rsvp-loadgen-progress-bar {
-	background: #e5e5e5;
-	border-radius: 3px;
-	height: 20px;
+.tec-data-generator-progress-bar {
+	background: var(--tec-color-border-secondary, #e5e5e5);
+	border-radius: var(--tec-border-radius-default, 3px);
+	height: var(--tec-spacer-4, 20px);
 	overflow: hidden;
 }
 
-.rsvp-loadgen-progress-fill {
-	background: #2271b1;
+.tec-data-generator-progress-fill {
+	background: var(--tec-admin-core-blue-50, #2271b1);
 	height: 100%;
 	width: 0;
 	transition: width 0.2s ease;
 }
 
-.rsvp-loadgen-progress-label {
-	margin: 6px 0 0;
+.tec-data-generator-progress-label {
+	margin: var(--tec-spacer-1, 8px) 0 0;
 	font-size: 13px;
 }
 
-.rsvp-loadgen-section {
-	border-top: 2px solid #e5e5e5;
-	margin-bottom: 24px;
+.tec-data-generator-section {
+	border-top: 2px solid var(--tec-color-border-secondary, #e5e5e5);
+	margin-bottom: var(--tec-spacer-5, 24px);
 }
 
 /* WP admin's own `.spinner` is loaded by wp-admin core, we just align it next to a button. */
-.rsvp-loadgen-spinner {
+.tec-data-generator-spinner {
 	float: none;
 	vertical-align: middle;
-	margin: 0 0 0 6px;
+	margin: 0 0 0 calc(var(--tec-spacer-2, 12px) / 2);
 }
 
-.rsvp-loadgen-notice {
+.tec-data-generator-notice {
 	max-width: 640px;
-	margin: 12px 0;
+	margin: var(--tec-spacer-2, 12px) 0;
+}
+
+/* Danger zone: cleanup removes all tagged content — solid red button. */
+#tec-data-generator-cleanup-btn {
+	background: var(--tec-color-wp-error, #d63638);
+	border-color: var(--tec-color-wp-error, #d63638);
+	color: var(--tec-color-background, #fff);
+}
+
+#tec-data-generator-cleanup-btn:hover,
+#tec-data-generator-cleanup-btn:focus {
+	background: var(--tec-color-icon-error, #da394d);
+	border-color: var(--tec-color-icon-error, #da394d);
+	color: var(--tec-color-background, #fff);
+	filter: brightness(0.9);
+}
+
+#tec-data-generator-cleanup-btn:disabled {
+	background: var(--tec-color-text-disabled, #d5d5d5);
+	border-color: var(--tec-color-text-disabled, #d5d5d5);
+	color: var(--tec-color-background, #fff);
 }

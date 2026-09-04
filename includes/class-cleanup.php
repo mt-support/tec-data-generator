@@ -1,10 +1,10 @@
 <?php
 /**
  * Finds and removes everything the load generator created, based solely on the
- * `_rsvp_loadgen_generated` marker meta — never touches untagged (real) content.
+ * `_tec_data_generator_generated` marker meta — never touches untagged (real) content.
  */
 
-namespace RSVP_Loadgen;
+namespace TEC\DataGenerator;
 
 class Cleanup {
 
@@ -146,6 +146,9 @@ class Cleanup {
 			'order'            => 'ASC',
 			'no_found_rows'    => true,
 			'suppress_filters' => true,
+			// Keep TEC Custom Tables from swapping tribe_events results for provisional
+			// occurrence IDs (no wp_posts row, so wp_delete_post() fails on them forever).
+			'tec_events_ignore' => true,
 		] );
 	}
 
@@ -160,6 +163,8 @@ class Cleanup {
 			'fields'           => 'ids',
 			'meta_query'       => $this->meta_query( $run_id ),
 			'suppress_filters' => true,
+			// Same as query_ids(): count real rows, not provisional occurrence IDs.
+			'tec_events_ignore' => true,
 		] );
 
 		return (int) $query->found_posts;
