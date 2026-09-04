@@ -254,6 +254,20 @@ Generate/Scenario/Cleanup all lock each other while one is running, so you can't
 overlapping runs from the same tab. Only one scenario can run at a time site-wide — starting a second one
 while another is still in progress is rejected with a message naming the run already in flight.
 
+## Packaging a distributable ZIP
+
+Since this plugin isn't shipped through the WordPress.org repo, use `package.sh` to build a clean ZIP for
+sharing with QA — it excludes dev-only files (dotfiles/dotfolders, `docs/`, `openspec/`, `*.md`, `package.sh`
+itself) so none of this repo's tooling leaks into the file QA installs:
+
+```bash
+./package.sh
+```
+
+This creates `tec-data-generator-<version>.zip` (version read from the `TEC_DATA_GENERATOR_VERSION` constant
+in `tec-data-generator.php`) one directory above the plugin folder, ready to drop into `wp-content/plugins/`
+on a QA site and activate as-is — no Composer install or build step needed on the receiving end.
+
 ## Recommended first run
 
 Before generating 5000+ on a shared QA site, verify the tool and the migration agree on a small batch first:
