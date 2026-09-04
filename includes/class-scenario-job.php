@@ -114,6 +114,8 @@ class Scenario_Job {
 			return;
 		}
 
+		set_time_limit( 0 );
+
 		try {
 			$remaining = max( 0, $job['total'] - $job['done'] );
 			$chunk     = min( self::CHUNK_SIZE, $remaining );
