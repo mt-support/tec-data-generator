@@ -143,6 +143,7 @@ class Cleanup {
 			'tribe_events'         => 'event',
 			'page'                 => 'page',
 			'post'                 => 'post',
+			'tribe_event_series'   => 'series',
 			'tribe_rsvp_tickets'   => 'ticket',
 			'tribe_rsvp_attendees' => 'attendee',
 			'tribe_venue'          => 'venue',

@@ -89,21 +89,7 @@ class CLI {
 
 		\WP_CLI::log( "Starting generation of {$count} units (run: {$run_id})..." );
 
-		$done = 0;
-
-		try {
-			while ( $done < $count ) {
-				$chunk = min( $batch_size, $count - $done );
-
-				$generator->generate_batch( $chunk, $done, $options );
-
-				$done += $chunk;
-
-				\WP_CLI::log( "  ...{$done}/{$count} generated" );
-			}
-		} catch ( \Exception $e ) {
-			\WP_CLI::error( $e->getMessage() );
-		}
+		$this->generate_in_chunks( $generator, $count, $batch_size, $options );
 
 		\WP_CLI::success( "Generated {$count} tickets with attendees (run: {$run_id})." );
 	}
@@ -120,12 +106,11 @@ class CLI {
 	 * ---
 	 *
 	 * [--container=<type>]
-	 * : What to create: event (tribe_events) or page.
+	 * : What to create: event (tribe_events only).
 	 * ---
 	 * default: event
 	 * options:
 	 *   - event
-	 *   - page
 	 * ---
 	 *
 	 * [--editor=<editor>]
@@ -158,7 +143,7 @@ class CLI {
 	 * ## EXAMPLES
 	 *
 	 *     wp tec-data-generator generate-events --count=50
-	 *     wp tec-data-generator generate-events --count=50 --container=page --editor=block
+	 *     wp tec-data-generator generate-events --count=50 --editor=block
 	 *     wp tec-data-generator generate-events --count=20 --event-types=single,recurring --editor=block
 	 *
 	 * @subcommand generate-events
@@ -183,21 +168,7 @@ class CLI {
 
 		\WP_CLI::log( "Starting events-only generation of {$count} containers (run: {$run_id})..." );
 
-		$done = 0;
-
-		try {
-			while ( $done < $count ) {
-				$chunk = min( $batch_size, $count - $done );
-
-				$generator->generate_batch( $chunk, $done, $options );
-
-				$done += $chunk;
-
-				\WP_CLI::log( "  ...{$done}/{$count} generated" );
-			}
-		} catch ( \Exception $e ) {
-			\WP_CLI::error( $e->getMessage() );
-		}
+		$this->generate_in_chunks( $generator, $count, $batch_size, $options );
 
 		\WP_CLI::success( "Generated {$count} event containers with no tickets (run: {$run_id})." );
 	}
@@ -351,23 +322,109 @@ class CLI {
 
 		\WP_CLI::log( "Starting tickets generation on {$count} new {$options['container']} containers (run: {$run_id})..." );
 
-		$done = 0;
-
-		try {
-			while ( $done < $count ) {
-				$chunk = min( $batch_size, $count - $done );
-
-				$generator->generate_batch( $chunk, $done, $options );
-
-				$done += $chunk;
-
-				\WP_CLI::log( "  ...{$done}/{$count} generated" );
-			}
-		} catch ( \Exception $e ) {
-			\WP_CLI::error( $e->getMessage() );
-		}
+		$this->generate_in_chunks( $generator, $count, $batch_size, $options );
 
 		\WP_CLI::success( "Generated {$ticket_type} tickets on {$count} new {$options['container']} containers (run: {$run_id})." );
+	}
+
+	/**
+	 * Generates event series: groups of events with different details, linked together.
+	 *
+	 * ## OPTIONS
+	 *
+	 * [--count=<number>]
+	 * : Number of series to create.
+	 * ---
+	 * default: 5
+	 * ---
+	 *
+	 * [--events-per-series=<number>]
+	 * : Events per series.
+	 * ---
+	 * default: 5
+	 * ---
+	 *
+	 * [--with-venues]
+	 * : Attach different random venue to each event in series.
+	 *
+	 * [--with-organizers]
+	 * : Attach different random organizer to each event in series.
+	 *
+	 * [--ticket-type=<type>]
+	 * : Ticket mode per event (rsvp, paid, or none).
+	 * ---
+	 * default: rsvp
+	 * options:
+	 *   - rsvp
+	 *   - paid
+	 *   - none
+	 * ---
+	 *
+	 * [--min-attendees=<number>]
+	 * : Minimum attendees per ticket.
+	 * ---
+	 * default: 1
+	 * ---
+	 *
+	 * [--max-attendees=<number>]
+	 * : Maximum attendees per ticket.
+	 * ---
+	 * default: 20
+	 * ---
+	 *
+	 * [--batch-size=<number>]
+	 * : How many series per internal batch/progress tick.
+	 * ---
+	 * default: 5
+	 * ---
+	 *
+	 * ## EXAMPLES
+	 *
+	 *     wp tec-data-generator generate-series --count=5 --events-per-series=5
+	 *     wp tec-data-generator generate-series --count=10 --events-per-series=3 --with-venues
+	 *     wp tec-data-generator generate-series --count=3 --with-venues --with-organizers --ticket-type=paid
+	 *
+	 * @when after_wp_load
+	 */
+	public function generate_series( $args, $assoc_args ) {
+		set_time_limit( 0 );
+
+		$count              = max( 1, (int) ( $assoc_args['count'] ?? 5 ) );
+		$events_per_series  = max( 1, (int) ( $assoc_args['events-per-series'] ?? 5 ) );
+		$batch_size         = max( 1, (int) ( $assoc_args['batch-size'] ?? 5 ) );
+		$min_attendees      = max( 1, (int) ( $assoc_args['min-attendees'] ?? 1 ) );
+		$max_attendees      = max( $min_attendees, (int) ( $assoc_args['max-attendees'] ?? 20 ) );
+		$ticket_type        = $assoc_args['ticket-type'] ?? 'rsvp';
+		$run_id             = Data::new_run_id();
+		$generator          = new Generator( $run_id );
+
+		$options = [
+			'min_attendees'    => $min_attendees,
+			'max_attendees'    => $max_attendees,
+			'with_venues'      => isset( $assoc_args['with-venues'] ),
+			'with_organizers'  => isset( $assoc_args['with-organizers'] ),
+			'ticket_type'      => $ticket_type,
+			'editor'           => 'classic',
+		];
+
+		\WP_CLI::log( "Starting series generation of {$count} series with {$events_per_series} events each (run: {$run_id})..." );
+
+		$offset = 0;
+		for ( $b = 0; $b < $count; $b += $batch_size ) {
+			$batch_count = min( $batch_size, $count - $b );
+			$result      = $generator->generate_series( $batch_count, $offset, $events_per_series, $options );
+			$offset     += $batch_count;
+
+			\WP_CLI::log( sprintf(
+				'  Generated batch: %d series, %d events, %d tickets, %d attendees',
+				count( $result['series_ids'] ),
+				count( $result['post_ids'] ),
+				count( $result['ticket_ids'] ),
+				count( $result['attendee_ids'] )
+			) );
+		}
+
+		\WP_CLI::success( "Generated {$count} series with {$events_per_series} events each (run: {$run_id})." );
 	}
 
 	/**
@@ -638,6 +695,28 @@ class CLI {
 		$attendee_ids = $generator->add_attendees( $ticket_id, $quantity );
 
 		\WP_CLI::success( 'Added ' . count( $attendee_ids ) . " attendee(s) to ticket {$ticket_id} (run: {$run_id})." );
+	}
+
+	/**
+	 * Runs generate_batch() in --batch-size chunks until $count is reached, logging progress
+	 * after each chunk. Shared by generate()/generate_events()/generate_tickets().
+	 */
+	private function generate_in_chunks( Generator $generator, int $count, int $batch_size, array $options ): void {
+		$done = 0;
+
+		try {
+			while ( $done < $count ) {
+				$chunk = min( $batch_size, $count - $done );
+
+				$generator->generate_batch( $chunk, $done, $options );
+
+				$done += $chunk;
+
+				\WP_CLI::log( "  ...{$done}/{$count} generated" );
+			}
+		} catch ( \Exception $e ) {
+			\WP_CLI::error( $e->getMessage() );
+		}
 	}
 
 	/**

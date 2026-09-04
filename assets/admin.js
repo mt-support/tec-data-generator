@@ -25,6 +25,13 @@
 	var ticketsProgressLabel = ticketsProgress ? ticketsProgress.querySelector( '.tec-data-generator-progress-label' ) : null;
 	var ticketsNoticeEl = document.getElementById( 'tec-data-generator-tickets-notice' );
 
+	var seriesBtn = document.getElementById( 'tec-data-generator-series-generate-btn' );
+	var seriesSpinner = document.getElementById( 'tec-data-generator-series-spinner' );
+	var seriesProgress = document.getElementById( 'tec-data-generator-series-progress' );
+	var seriesProgressFill = seriesProgress ? seriesProgress.querySelector( '.tec-data-generator-progress-fill' ) : null;
+	var seriesProgressLabel = seriesProgress ? seriesProgress.querySelector( '.tec-data-generator-progress-label' ) : null;
+	var seriesNoticeEl = document.getElementById( 'tec-data-generator-series-notice' );
+
 	var scenarioTypeSelect = document.getElementById( 'tec-data-generator-scenario-type' );
 	var scenarioBtn = document.getElementById( 'tec-data-generator-scenario-btn' );
 	var scenarioCancelBtn = document.getElementById( 'tec-data-generator-scenario-cancel-btn' );
@@ -240,6 +247,42 @@
 				}
 
 				setNotice( ticketsNoticeEl, 'success', 'Generated tickets on ' + res.data.total + ' containers (run: ' + runId + ').' );
+			} );
+		}
+
+		return step().then( refreshCounts );
+	}
+
+	function runSeriesLoop( total, eventsPerSeries, withVenues, withOrganizers, ticketType, minAttendees, maxAttendees ) {
+		var runId = null;
+
+		function step() {
+			return postAjax( TecDataGenerator.actions.generateSeries, {
+				total: total,
+				events_per_series: eventsPerSeries,
+				with_venues: withVenues,
+				with_organizers: withOrganizers,
+				ticket_type: ticketType || 'rsvp',
+				min_attendees: minAttendees,
+				max_attendees: maxAttendees,
+				chunk_size: TecDataGenerator.chunkSize,
+				run_id: runId || '',
+			} ).then( function ( res ) {
+				if ( ! res || ! res.success ) {
+					var message = ( res && res.data && res.data.message ) || 'Error generating series. See console/logs for details.';
+					showSectionProgress( seriesProgress, seriesProgressFill, seriesProgressLabel, 0, total, '' );
+					setNotice( seriesNoticeEl, 'error', message );
+					return;
+				}
+
+				runId = res.data.run_id;
+				showSectionProgress( seriesProgress, seriesProgressFill, seriesProgressLabel, res.data.done, res.data.total, res.data.done + ' / ' + res.data.total + ' series generated' );
+
+				if ( ! res.data.finished ) {
+					return step();
+				}
+
+				setNotice( seriesNoticeEl, 'success', 'Generated ' + res.data.total + ' series with ' + ( res.data.done / res.data.total ) + ' events each (run: ' + runId + ').' );
 			} );
 		}
 
@@ -537,6 +580,55 @@
 					cleanupBtn.disabled = false;
 				}
 				setSpinner( ticketsSpinner, false );
+			} );
+		} );
+	}
+
+	if ( seriesBtn ) {
+		seriesBtn.addEventListener( 'click', function () {
+			var total = parseInt( document.getElementById( 'tec-data-generator-series-total' ).value, 10 ) || 5;
+			var eventsPerSeries = parseInt( document.getElementById( 'tec-data-generator-series-events-per' ).value, 10 ) || 5;
+			var ticketTypeEl = document.querySelector( 'input[name="tec-data-generator-series-ticket-type"]:checked' );
+			var ticketType = ticketTypeEl ? ticketTypeEl.value : 'rsvp';
+			var withVenues = document.getElementById( 'tec-data-generator-series-with-venues' );
+			var withOrganizers = document.getElementById( 'tec-data-generator-series-with-organizers' );
+			var minAttendees = parseInt( document.getElementById( 'tec-data-generator-series-min-attendees' ).value, 10 ) || 1;
+			var maxAttendees = parseInt( document.getElementById( 'tec-data-generator-series-max-attendees' ).value, 10 ) || 20;
+
+			seriesBtn.disabled = true;
+			if ( eventsBtn ) {
+				eventsBtn.disabled = true;
+			}
+			if ( ticketsBtn ) {
+				ticketsBtn.disabled = true;
+			}
+			if ( cleanupBtn ) {
+				cleanupBtn.disabled = true;
+			}
+			setSpinner( seriesSpinner, true );
+			setNotice( seriesNoticeEl, 'info', 'Generating series — this may take a while. Please keep this page open.' );
+			showSectionProgress( seriesProgress, seriesProgressFill, seriesProgressLabel, 0, total, '0 / ' + total + ' series generated' );
+
+			runSeriesLoop(
+				total,
+				eventsPerSeries,
+				withVenues && withVenues.checked ? 1 : 0,
+				withOrganizers && withOrganizers.checked ? 1 : 0,
+				ticketType,
+				minAttendees,
+				maxAttendees
+			).finally( function () {
+				seriesBtn.disabled = false;
+				if ( eventsBtn ) {
+					eventsBtn.disabled = false;
+				}
+				if ( ticketsBtn ) {
+					ticketsBtn.disabled = false;
+				}
+				if ( cleanupBtn ) {
+					cleanupBtn.disabled = false;
+				}
+				setSpinner( seriesSpinner, false );
 			} );
 		} );
 	}
