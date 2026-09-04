@@ -250,6 +250,7 @@ class Ajax {
 
 		if ( ! $job ) {
 			wp_send_json_success( [ 'status' => 'idle' ] );
+			return;
 		}
 
 		wp_send_json_success( $this->scenario_job_response( $job ) );
