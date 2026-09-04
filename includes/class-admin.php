@@ -12,6 +12,7 @@ class Admin {
 	public function hook(): void {
 		add_action( 'admin_menu', [ $this, 'register_page' ] );
 		add_action( 'admin_enqueue_scripts', [ $this, 'enqueue_assets' ] );
+		add_action( 'parse_query', [ $this, 'filter_generated_posts' ] );
 	}
 
 	public function register_page(): void {
@@ -69,6 +70,23 @@ class Admin {
 				'addRsvp'          => Ajax::ACTION_ADD_RSVP,
 				'addTickets'       => Ajax::ACTION_ADD_TICKETS,
 				'addAttendees'     => Ajax::ACTION_ADD_ATTENDEES,
+			],
+		] );
+	}
+
+	public function filter_generated_posts( \WP_Query $query ): void {
+		if ( ! is_admin() || ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
+
+		if ( ! isset( $_GET['tec_generated_data'] ) || '1' !== $_GET['tec_generated_data'] ) {
+			return;
+		}
+
+		$query->set( 'meta_query', [
+			[
+				'key'   => Data::GENERATED_META_KEY,
+				'value' => '1',
 			],
 		] );
 	}

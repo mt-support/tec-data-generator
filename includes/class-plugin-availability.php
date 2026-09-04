@@ -13,6 +13,25 @@ class Plugin_Availability {
 	const ALLOWED_EVENT_TYPES  = [ 'single', 'recurring', 'virtual' ];
 	const ALLOWED_TICKET_TYPES = [ 'rsvp', 'paid', 'none' ];
 
+	const STATUS_DEFINITIONS = [
+		[
+			'name' => 'The Events Calendar',
+			'file' => 'the-events-calendar/the-events-calendar.php',
+		],
+		[
+			'name' => 'Event Tickets',
+			'file' => 'event-tickets/event-tickets.php',
+		],
+		[
+			'name' => 'Events Calendar Pro',
+			'file' => 'events-pro/events-calendar-pro.php',
+		],
+		[
+			'name' => 'Event Tickets Plus',
+			'file' => 'event-tickets-plus/event-tickets-plus.php',
+		],
+	];
+
 	public static function has_event_tickets(): bool {
 		return class_exists( 'Tribe__Tickets__RSVP' ) || class_exists( 'Tribe__Tickets__Main' );
 	}
@@ -36,5 +55,49 @@ class Plugin_Availability {
 
 	public static function has_events_pro_or_ecp(): bool {
 		return self::has_events_pro() || self::has_ecp();
+	}
+
+	/**
+	 * Name, status, and version for the plugins shown in the admin page's status table.
+	 *
+	 * @return array<int,array{name:string,status:string,status_label:string,version:string}>
+	 */
+	public static function get_statuses(): array {
+		if ( ! function_exists( 'get_plugin_data' ) && defined( 'ABSPATH' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		}
+
+		$statuses = [];
+
+		foreach ( self::STATUS_DEFINITIONS as $definition ) {
+			if ( ! file_exists( WP_PLUGIN_DIR . '/' . $definition['file'] ) ) {
+				$statuses[] = [
+					'name'         => $definition['name'],
+					'status'       => 'not-installed',
+					'status_label' => __( 'Not installed', 'tec-data-generator' ),
+					'version'      => '',
+				];
+
+				continue;
+			}
+
+			$data    = function_exists( 'get_plugin_data' )
+				? get_plugin_data( WP_PLUGIN_DIR . '/' . $definition['file'], false, false )
+				: [];
+			$active  = function_exists( 'is_plugin_active' )
+				? is_plugin_active( $definition['file'] )
+				: in_array( $definition['file'], (array) get_option( 'active_plugins', [] ), true );
+
+			$statuses[] = [
+				'name'         => $definition['name'],
+				'status'       => $active ? 'active' : 'inactive',
+				'status_label' => $active
+					? __( 'Active', 'tec-data-generator' )
+					: __( 'Inactive', 'tec-data-generator' ),
+				'version'      => isset( $data['Version'] ) ? (string) $data['Version'] : '',
+			];
+		}
+
+		return $statuses;
 	}
 }

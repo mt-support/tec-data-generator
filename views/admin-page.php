@@ -59,10 +59,30 @@ if ( ! defined( 'ABSPATH' ) ) {
 		<h2><?php esc_html_e( 'Currently generated', 'tec-data-generator' ); ?></h2>
 		<table class="widefat striped" style="max-width: 480px;" id="tec-data-generator-counts">
 			<tbody>
+			<?php
+			$post_type_map = [
+				'events'   => 'tribe_events',
+				'pages'    => 'page',
+				'posts'    => 'post',
+				'tickets'  => 'tribe_rsvp',
+				'attendees' => 'tribe_attendees',
+				'venues'   => 'tribe_venue',
+				'organizers' => 'tribe_organizer',
+			];
+			?>
 			<?php foreach ( $counts as $kind => $count ) : ?>
 				<tr>
 					<td><?php echo esc_html( ucfirst( $kind ) ); ?></td>
-					<td data-kind="<?php echo esc_attr( $kind ); ?>"><?php echo esc_html( number_format_i18n( $count ) ); ?></td>
+					<td data-kind="<?php echo esc_attr( $kind ); ?>">
+						<?php
+						if ( $count > 0 && isset( $post_type_map[ $kind ] ) ) {
+							$edit_url = add_query_arg( 'tec_generated_data', '1', admin_url( 'edit.php?post_type=' . $post_type_map[ $kind ] ) );
+							echo '<a href="' . esc_url( $edit_url ) . '">' . esc_html( number_format_i18n( $count ) ) . '</a>';
+						} else {
+							echo esc_html( number_format_i18n( $count ) );
+						}
+						?>
+					</td>
 				</tr>
 			<?php endforeach; ?>
 			</tbody>

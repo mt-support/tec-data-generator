@@ -309,17 +309,23 @@
 		if ( 'completed' === job.status ) {
 			showScenarioProgress( job.done, job.total, job.done + ' / ' + job.total + ' units generated' );
 			setNotice( scenarioNoticeEl, 'success', scenarioResultMessage( job ) );
+			setTimeout( function () {
+				setNotice( scenarioNoticeEl, 'success', '' );
+				scenarioProgress.hidden = true;
+			}, 5000 );
 		} else if ( 'failed' === job.status ) {
 			setNotice( scenarioNoticeEl, 'error', 'Scenario failed: ' + ( job.error || 'unknown error' ) );
 		}
 	}
 
-	function pollScenarioStatus() {
+	function pollScenarioStatus( applyState ) {
 		return postAjax( TecDataGenerator.actions.scenarioStatus ).then( function ( res ) {
 			if ( ! res || ! res.success ) {
 				return null;
 			}
-			applyScenarioJobState( res.data );
+			if ( applyState !== false ) {
+				applyScenarioJobState( res.data );
+			}
 			return res.data;
 		} );
 	}
@@ -349,7 +355,8 @@
 				scenarioTypeSelect.disabled = true;
 			}
 			setSpinner( scenarioSpinner, true );
-			setNotice( scenarioNoticeEl, 'info', '' );
+			setNotice( scenarioNoticeEl, 'info', 'Scenario generation started — this may take a while. You can close this tab and come back later to check progress.' );
+			showScenarioProgress( 0, 0, 'Initializing scenario...' );
 
 			postAjax( TecDataGenerator.actions.scheduleScenario, {
 				type: type,
@@ -404,7 +411,7 @@
 
 	// Boot-time resume: if a scenario job is already running (tab was closed/reopened, or
 	// another admin started one), reflect it immediately and keep polling.
-	pollScenarioStatus().then( function ( data ) {
+	pollScenarioStatus( false ).then( function ( data ) {
 		if ( data && 'running' === data.status ) {
 			startScenarioPolling();
 		}
@@ -457,7 +464,8 @@
 				ticketsBtn.disabled = true;
 			}
 			setSpinner( eventsSpinner, true );
-			setNotice( eventsNoticeEl, 'info', '' );
+			setNotice( eventsNoticeEl, 'info', 'Generating events — this may take a while. Please keep this page open.' );
+			showSectionProgress( eventsProgress, eventsProgressFill, eventsProgressLabel, 0, total, '0 / ' + total + ' events generated' );
 
 			runEventsLoop(
 				total,
@@ -517,7 +525,8 @@
 				cleanupBtn.disabled = true;
 			}
 			setSpinner( ticketsSpinner, true );
-			setNotice( ticketsNoticeEl, 'info', '' );
+			setNotice( ticketsNoticeEl, 'info', 'Generating tickets — this may take a while. Please keep this page open.' );
+			showSectionProgress( ticketsProgress, ticketsProgressFill, ticketsProgressLabel, 0, params.total || 0, '0 / ' + ( params.total || 0 ) + ' containers generated' );
 
 			runTicketsLoop( params ).finally( function () {
 				ticketsBtn.disabled = false;
@@ -585,7 +594,8 @@
 				ticketsBtn.disabled = true;
 			}
 			setSpinner( generateSpinner, true );
-			setNotice( generateNoticeEl, 'info', '' );
+			setNotice( generateNoticeEl, 'info', 'Cleanup in progress — this may take a while. Please keep this page open.' );
+			showProgress( 0, 0, 'Starting cleanup...' );
 
 			runCleanupLoop().finally( function () {
 				if ( generateBtn ) {

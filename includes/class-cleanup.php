@@ -23,6 +23,8 @@ class Cleanup {
 	 * @return int Number of posts actually deleted this call.
 	 */
 	public function cleanup_batch( int $limit, ?string $run_id = null ): int {
+		$this->suppress_rsvp_stock_adjustment_on_delete();
+
 		$removed = 0;
 
 		foreach ( self::POST_TYPES_IN_DELETE_ORDER as $post_type ) {
@@ -53,7 +55,33 @@ class Cleanup {
 			}
 		}
 
+		$this->restore_rsvp_stock_adjustment_on_delete();
+
 		return $removed;
+	}
+
+	/**
+	 * Event Tickets always hooks `Tribe__Tickets__RSVP::update_stock_from_attendees_page()` onto
+	 * `before_delete_post`, even when Tickets Commerce/RSVP v2 is active and its ticket repository
+	 * (`TEC\Tickets\RSVP\V2\Repositories\Ticket_Repository`) doesn't implement the `adjust_sales()`
+	 * method that call chain needs — producing a `call_user_func_array()` PHP warning on every
+	 * attendee deletion. Irrelevant here: we're force-deleting whole tagged test-data runs, not
+	 * adjusting stock for a live ticket, so unhook it for the duration of the delete loop.
+	 */
+	private function suppress_rsvp_stock_adjustment_on_delete(): void {
+		if ( ! function_exists( 'tribe' ) || ! class_exists( 'Tribe__Tickets__RSVP' ) ) {
+			return;
+		}
+
+		remove_action( 'before_delete_post', [ tribe( 'tickets.rsvp' ), 'update_stock_from_attendees_page' ] );
+	}
+
+	private function restore_rsvp_stock_adjustment_on_delete(): void {
+		if ( ! function_exists( 'tribe' ) || ! class_exists( 'Tribe__Tickets__RSVP' ) ) {
+			return;
+		}
+
+		add_action( 'before_delete_post', [ tribe( 'tickets.rsvp' ), 'update_stock_from_attendees_page' ] );
 	}
 
 	/**

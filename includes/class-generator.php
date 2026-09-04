@@ -360,13 +360,17 @@ class Generator {
 
 	/**
 	 * Builds container post_content for the requested editor. Classic is the legacy plain
-	 * text; block wraps the same words in real Gutenberg paragraph/heading markup so the
-	 * container opens in the block editor. Ticket creation is unaffected (always the
-	 * production ticket_add() path).
+	 * text; block wraps the same words in real Gutenberg markup so the container opens in
+	 * the block editor. Ticket creation is unaffected (always the production ticket_add()
+	 * path) — this is presentation only.
 	 */
-	private function container_content( string $plain, string $title ): string {
+	private function container_content( string $plain, string $title, bool $is_event = false ): string {
 		if ( ( $this->options['editor'] ?? 'classic' ) !== 'block' ) {
 			return $plain;
+		}
+
+		if ( $is_event ) {
+			return $this->event_block_content( $plain );
 		}
 
 		return sprintf(
@@ -374,6 +378,31 @@ class Generator {
 			esc_html( $title ),
 			esc_html( $plain )
 		);
+	}
+
+	/**
+	 * Matches the block template a real event gets when created via the tribe_events block
+	 * editor — the same order TEC/Events Pro/Event Tickets build it via the
+	 * `tribe_events_editor_default_template` filter chain (event-price/organizer/venue/
+	 * website/links from TEC core, related-events from Events Pro, tickets/rsvp from Event
+	 * Tickets). All of these are dynamic blocks that render live from post meta, so this is
+	 * just the markup shape — it doesn't create tickets itself.
+	 */
+	private function event_block_content( string $plain ): string {
+		$blocks = [
+			'<!-- wp:tribe/event-datetime /-->',
+			sprintf( "<!-- wp:paragraph -->\n<p>%s</p>\n<!-- /wp:paragraph -->", esc_html( wp_strip_all_tags( $plain ) ) ),
+			'<!-- wp:tribe/event-price /-->',
+			'<!-- wp:tribe/event-organizer /-->',
+			'<!-- wp:tribe/event-venue /-->',
+			'<!-- wp:tribe/event-website /-->',
+			'<!-- wp:tribe/event-links /-->',
+			'<!-- wp:tribe/related-events /-->',
+			'<!-- wp:tribe/tickets /-->',
+			'<!-- wp:tribe/rsvp /-->',
+		];
+
+		return implode( "\n\n", $blocks );
 	}
 
 	/**
@@ -593,7 +622,7 @@ class Generator {
 			'status'     => 'publish',
 			'start_date' => $start->format( 'Y-m-d H:i:s' ),
 			'end_date'   => $end->format( 'Y-m-d H:i:s' ),
-			'content'    => $this->container_content( $plain, $title ),
+			'content'    => $this->container_content( $plain, $title, true ),
 		];
 
 		if ( $venue_id ) {

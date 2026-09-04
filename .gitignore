@@ -1,0 +1,19 @@
+# OS
+.DS_Store
+
+# Editors / IDEs
+.vscode/
+.idea/
+
+# Local agent/tool state — not part of the plugin
+.claude/
+.codegraph/
+.code-review-graph/
+.cursor/
+.omo/
+.opencode/
+.playwright-mcp/
+.superpowers/
+
+# Build output (see package.sh)
+*.zip
