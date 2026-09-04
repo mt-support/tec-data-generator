@@ -99,7 +99,13 @@ class Scenario_Job {
 
 		as_enqueue_async_action( self::AS_HOOK, [], self::AS_GROUP );
 
-		return [ 'success' => true, 'job' => $job ];
+		// Kick off the first chunk synchronously to ensure progress is visible
+		// immediately. Action Scheduler will continue with remaining chunks
+		// asynchronously. Without this, sites with loopback-request issues see
+		// a stalled "0/X units" message forever.
+		$this->process_chunk();
+
+		return [ 'success' => true, 'job' => self::get() ?? $job ];
 	}
 
 	/**
