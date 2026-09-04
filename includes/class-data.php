@@ -9,6 +9,8 @@ class Data {
 
 	const GENERATED_META_KEY = '_tec_data_generator_generated';
 	const RUN_ID_META_KEY    = '_tec_data_generator_run_id';
+	const POST_KIND_META_KEY = '_tec_data_generator_post_kind';
+	const EVENT_TYPE_META_KEY = '_tec_data_generator_event_type';
 	const EDITOR_META_KEY = '_tec_data_generator_editor';
 
 	const FIRST_NAMES = [
