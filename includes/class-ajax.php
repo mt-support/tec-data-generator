@@ -55,35 +55,24 @@ class Ajax {
 		$total         = max( 1, (int) ( $_POST['total'] ?? 0 ) );
 		$min_attendees = max( 1, (int) ( $_POST['min_attendees'] ?? 1 ) );
 		$max_attendees = max( $min_attendees, (int) ( $_POST['max_attendees'] ?? 20 ) );
-		$chunk_size    = min( self::MAX_CHUNK_SIZE, max( 1, (int) ( $_POST['chunk_size'] ?? 75 ) ) );
 
-		$run_id = isset( $_POST['run_id'] ) ? sanitize_text_field( wp_unslash( $_POST['run_id'] ) ) : '';
-		$state  = $run_id ? get_transient( self::TRANSIENT_PREFIX . $run_id ) : false;
+		$this->chunked_request_handler(
+			function ( $run_id ) use ( $total, $min_attendees, $max_attendees ) {
+				$raw_event_types = isset( $_POST['event_types'] ) ? sanitize_text_field( wp_unslash( $_POST['event_types'] ) ) : 'single';
+				$raw_ticket_type = isset( $_POST['ticket_type'] ) ? sanitize_text_field( wp_unslash( $_POST['ticket_type'] ) ) : 'rsvp';
 
-		if ( ! is_array( $state ) ) {
-			$raw_event_types = isset( $_POST['event_types'] ) ? sanitize_text_field( wp_unslash( $_POST['event_types'] ) ) : 'single';
-			$raw_ticket_type = isset( $_POST['ticket_type'] ) ? sanitize_text_field( wp_unslash( $_POST['ticket_type'] ) ) : 'rsvp';
-
-			$run_id = Data::new_run_id();
-			$state  = [
-				'total'           => $total,
-				'done'            => 0,
-				'min_attendees'   => $min_attendees,
-				'max_attendees'   => $max_attendees,
-				'with_venues'     => ! empty( $_POST['with_venues'] ),
-				'with_organizers' => ! empty( $_POST['with_organizers'] ),
-				'event_types'     => $raw_event_types,
-				'ticket_type'     => $raw_ticket_type,
-			];
-		}
-
-		$remaining = max( 0, $state['total'] - $state['done'] );
-		$this_run  = min( $chunk_size, $remaining );
-
-		if ( $this_run > 0 ) {
-			$generator = new Generator( $run_id );
-
-			try {
+				return [
+					'total'           => $total,
+					'done'            => 0,
+					'min_attendees'   => $min_attendees,
+					'max_attendees'   => $max_attendees,
+					'with_venues'     => ! empty( $_POST['with_venues'] ),
+					'with_organizers' => ! empty( $_POST['with_organizers'] ),
+					'event_types'     => $raw_event_types,
+					'ticket_type'     => $raw_ticket_type,
+				];
+			},
+			function ( $generator, $run_id, &$state, $this_run ) {
 				$generator->generate_batch( $this_run, $state['done'], [
 					'min_attendees'   => $state['min_attendees'],
 					'max_attendees'   => $state['max_attendees'],
@@ -92,62 +81,35 @@ class Ajax {
 					'event_types'     => $state['event_types'] ?? 'single',
 					'ticket_type'     => $state['ticket_type'] ?? 'rsvp',
 				] );
-			} catch ( \Exception $e ) {
-				// Validation failure (e.g. plugin deactivated mid-run): fail this request
-				// with a clear message instead of a fatal, so the UI can show it.
-				wp_send_json_error( [ 'message' => $e->getMessage() ] );
 			}
-
-			$state['done'] += $this_run;
-		}
-
-		set_transient( self::TRANSIENT_PREFIX . $run_id, $state, HOUR_IN_SECONDS );
-
-		wp_send_json_success( [
-			'run_id'   => $run_id,
-			'done'     => $state['done'],
-			'total'    => $state['total'],
-			'finished' => $state['done'] >= $state['total'],
-		] );
+		);
 	}
 
 	/**
-	 * Chunked "Generate Events" handler: containers only, no tickets. Each request creates
-	 * up to MAX_CHUNK_SIZE event/page posts with the chosen editor markup.
+	 * Chunked "Generate Events" handler: containers only, no tickets.
 	 */
 	public function handle_generate_events(): void {
 		$this->verify_request();
 
-		$total      = max( 1, (int) ( $_POST['total'] ?? 0 ) );
-		$chunk_size = min( self::MAX_CHUNK_SIZE, max( 1, (int) ( $_POST['chunk_size'] ?? 75 ) ) );
+		$total = max( 1, (int) ( $_POST['total'] ?? 0 ) );
 
-		$run_id = isset( $_POST['run_id'] ) ? sanitize_text_field( wp_unslash( $_POST['run_id'] ) ) : '';
-		$state  = $run_id ? get_transient( self::TRANSIENT_PREFIX . $run_id ) : false;
+		$this->chunked_request_handler(
+			function ( $run_id ) use ( $total ) {
+				$raw_event_types = isset( $_POST['event_types'] ) ? sanitize_text_field( wp_unslash( $_POST['event_types'] ) ) : 'single';
+				$container       = isset( $_POST['container'] ) ? sanitize_text_field( wp_unslash( $_POST['container'] ) ) : 'event';
+				$editor          = isset( $_POST['editor'] ) ? sanitize_text_field( wp_unslash( $_POST['editor'] ) ) : 'classic';
 
-		if ( ! is_array( $state ) ) {
-			$raw_event_types = isset( $_POST['event_types'] ) ? sanitize_text_field( wp_unslash( $_POST['event_types'] ) ) : 'single';
-			$container       = isset( $_POST['container'] ) ? sanitize_text_field( wp_unslash( $_POST['container'] ) ) : 'event';
-			$editor          = isset( $_POST['editor'] ) ? sanitize_text_field( wp_unslash( $_POST['editor'] ) ) : 'classic';
-
-			$run_id = Data::new_run_id();
-			$state  = [
-				'total'           => $total,
-				'done'            => 0,
-				'with_venues'     => ! empty( $_POST['with_venues'] ),
-				'with_organizers' => ! empty( $_POST['with_organizers'] ),
-				'event_types'     => $raw_event_types,
-				'container'       => in_array( $container, [ 'event', 'page' ], true ) ? $container : 'event',
-				'editor'          => in_array( $editor, [ 'classic', 'block' ], true ) ? $editor : 'classic',
-			];
-		}
-
-		$remaining = max( 0, $state['total'] - $state['done'] );
-		$this_run  = min( $chunk_size, $remaining );
-
-		if ( $this_run > 0 ) {
-			$generator = new Generator( $run_id );
-
-			try {
+				return [
+					'total'           => $total,
+					'done'            => 0,
+					'with_venues'     => ! empty( $_POST['with_venues'] ),
+					'with_organizers' => ! empty( $_POST['with_organizers'] ),
+					'event_types'     => $raw_event_types,
+					'container'       => in_array( $container, [ 'event', 'page' ], true ) ? $container : 'event',
+					'editor'          => in_array( $editor, [ 'classic', 'block' ], true ) ? $editor : 'classic',
+				];
+			},
+			function ( $generator, $run_id, &$state, $this_run ) {
 				$generator->generate_batch( $this_run, $state['done'], [
 					'ticket_type'     => 'none',
 					'with_venues'     => $state['with_venues'] ?? false,
@@ -156,21 +118,8 @@ class Ajax {
 					'container'       => $state['container'] ?? 'event',
 					'editor'          => $state['editor'] ?? 'classic',
 				] );
-			} catch ( \Exception $e ) {
-				wp_send_json_error( [ 'message' => $e->getMessage() ] );
 			}
-
-			$state['done'] += $this_run;
-		}
-
-		set_transient( self::TRANSIENT_PREFIX . $run_id, $state, HOUR_IN_SECONDS );
-
-		wp_send_json_success( [
-			'run_id'   => $run_id,
-			'done'     => $state['done'],
-			'total'    => $state['total'],
-			'finished' => $state['done'] >= $state['total'],
-		] );
+		);
 	}
 
 	/**
@@ -228,41 +177,31 @@ class Ajax {
 
 		$total = max( 1, (int) ( $_POST['total'] ?? 0 ) );
 
-		$run_id = isset( $_POST['run_id'] ) ? sanitize_text_field( wp_unslash( $_POST['run_id'] ) ) : '';
-		$state  = $run_id ? get_transient( self::TRANSIENT_PREFIX . $run_id ) : false;
+		$this->chunked_request_handler(
+			function ( $run_id ) use ( $total ) {
+				$raw_event_types = isset( $_POST['event_types'] ) ? sanitize_text_field( wp_unslash( $_POST['event_types'] ) ) : 'single';
+				$container       = isset( $_POST['container'] ) ? sanitize_text_field( wp_unslash( $_POST['container'] ) ) : 'event';
+				$editor          = isset( $_POST['editor'] ) ? sanitize_text_field( wp_unslash( $_POST['editor'] ) ) : 'classic';
+				$ticket_type     = isset( $_POST['ticket_type'] ) ? sanitize_text_field( wp_unslash( $_POST['ticket_type'] ) ) : 'rsvp';
+				$min_tickets     = max( 1, (int) ( $_POST['min_tickets'] ?? 1 ) );
+				$max_tickets     = max( $min_tickets, (int) ( $_POST['max_tickets'] ?? 1 ) );
+				$min_attendees   = max( 1, (int) ( $_POST['min_attendees'] ?? 1 ) );
+				$max_attendees   = max( $min_attendees, (int) ( $_POST['max_attendees'] ?? 20 ) );
 
-		if ( ! is_array( $state ) ) {
-			$raw_event_types = isset( $_POST['event_types'] ) ? sanitize_text_field( wp_unslash( $_POST['event_types'] ) ) : 'single';
-			$container       = isset( $_POST['container'] ) ? sanitize_text_field( wp_unslash( $_POST['container'] ) ) : 'event';
-			$editor          = isset( $_POST['editor'] ) ? sanitize_text_field( wp_unslash( $_POST['editor'] ) ) : 'classic';
-			$ticket_type     = isset( $_POST['ticket_type'] ) ? sanitize_text_field( wp_unslash( $_POST['ticket_type'] ) ) : 'rsvp';
-			$min_tickets     = max( 1, (int) ( $_POST['min_tickets'] ?? 1 ) );
-			$max_tickets     = max( $min_tickets, (int) ( $_POST['max_tickets'] ?? 1 ) );
-			$min_attendees   = max( 1, (int) ( $_POST['min_attendees'] ?? 1 ) );
-			$max_attendees   = max( $min_attendees, (int) ( $_POST['max_attendees'] ?? 20 ) );
-
-			$run_id = Data::new_run_id();
-			$state  = [
-				'total'           => $total,
-				'done'            => 0,
-				'min_attendees'   => $min_attendees,
-				'max_attendees'   => $max_attendees,
-				'min_tickets'     => $min_tickets,
-				'max_tickets'     => $max_tickets,
-				'event_types'     => $raw_event_types,
-				'container'       => in_array( $container, [ 'event', 'page' ], true ) ? $container : 'event',
-				'editor'          => in_array( $editor, [ 'classic', 'block' ], true ) ? $editor : 'classic',
-				'ticket_type'     => in_array( $ticket_type, [ 'rsvp', 'paid' ], true ) ? $ticket_type : 'rsvp',
-			];
-		}
-
-		$remaining = max( 0, $state['total'] - $state['done'] );
-		$this_run  = min( $chunk_size, $remaining );
-
-		if ( $this_run > 0 ) {
-			$generator = new Generator( $run_id );
-
-			try {
+				return [
+					'total'           => $total,
+					'done'            => 0,
+					'min_attendees'   => $min_attendees,
+					'max_attendees'   => $max_attendees,
+					'min_tickets'     => $min_tickets,
+					'max_tickets'     => $max_tickets,
+					'event_types'     => $raw_event_types,
+					'container'       => in_array( $container, [ 'event', 'page' ], true ) ? $container : 'event',
+					'editor'          => in_array( $editor, [ 'classic', 'block' ], true ) ? $editor : 'classic',
+					'ticket_type'     => in_array( $ticket_type, [ 'rsvp', 'paid' ], true ) ? $ticket_type : 'rsvp',
+				];
+			},
+			function ( $generator, $run_id, &$state, $this_run ) {
 				$generator->generate_batch( $this_run, $state['done'], [
 					'min_attendees'      => $state['min_attendees'],
 					'max_attendees'      => $state['max_attendees'],
@@ -273,21 +212,8 @@ class Ajax {
 					'editor'             => $state['editor'] ?? 'classic',
 					'ticket_type'        => $state['ticket_type'] ?? 'rsvp',
 				] );
-			} catch ( \Exception $e ) {
-				wp_send_json_error( [ 'message' => $e->getMessage() ] );
 			}
-
-			$state['done'] += $this_run;
-		}
-
-		set_transient( self::TRANSIENT_PREFIX . $run_id, $state, HOUR_IN_SECONDS );
-
-		wp_send_json_success( [
-			'run_id'   => $run_id,
-			'done'     => $state['done'],
-			'total'    => $state['total'],
-			'finished' => $state['done'] >= $state['total'],
-		] );
+		);
 	}
 
 	/**
@@ -470,6 +396,52 @@ class Ajax {
 		$attendee_ids = $generator->add_attendees( $ticket_id, $quantity );
 
 		wp_send_json_success( [ 'created' => count( $attendee_ids ), 'run_id' => $run_id ] );
+	}
+
+	/**
+	 * Shared chunked-request handler: manages transient state across requests,
+	 * chunks work, and sends progress responses. Eliminates duplication across
+	 * handle_generate, handle_generate_events, handle_generate_tickets.
+	 *
+	 * @param callable $get_state Callback: (run_id) => initial state if state doesn't exist.
+	 * @param callable $process_chunk Callback: (generator, run_id, state) => void (mutates state in-place).
+	 *
+	 * @return void Sends JSON response directly via wp_send_json_success/error.
+	 */
+	private function chunked_request_handler( callable $get_state, callable $process_chunk ): void {
+		$total      = max( 1, (int) ( $_POST['total'] ?? 0 ) );
+		$chunk_size = min( self::MAX_CHUNK_SIZE, max( 1, (int) ( $_POST['chunk_size'] ?? 75 ) ) );
+		$run_id     = isset( $_POST['run_id'] ) ? sanitize_text_field( wp_unslash( $_POST['run_id'] ) ) : '';
+		$state      = $run_id ? get_transient( self::TRANSIENT_PREFIX . $run_id ) : false;
+
+		if ( ! is_array( $state ) ) {
+			$run_id = Data::new_run_id();
+			$state  = $get_state( $run_id );
+		}
+
+		$remaining = max( 0, $state['total'] - $state['done'] );
+		$this_run  = min( $chunk_size, $remaining );
+
+		if ( $this_run > 0 ) {
+			$generator = new Generator( $run_id );
+
+			try {
+				$process_chunk( $generator, $run_id, $state, $this_run );
+			} catch ( \Exception $e ) {
+				wp_send_json_error( [ 'message' => $e->getMessage() ] );
+			}
+
+			$state['done'] += $this_run;
+		}
+
+		set_transient( self::TRANSIENT_PREFIX . $run_id, $state, HOUR_IN_SECONDS );
+
+		wp_send_json_success( [
+			'run_id'   => $run_id,
+			'done'     => $state['done'],
+			'total'    => $state['total'],
+			'finished' => $state['done'] >= $state['total'],
+		] );
 	}
 
 	private function verify_request(): void {
