@@ -346,7 +346,9 @@ class Ajax {
 	public function handle_cleanup(): void {
 		$this->verify_request();
 
-		$chunk_size = min( 200, max( 1, (int) ( $_POST['chunk_size'] ?? 100 ) ) );
+		// Capped at 75 server-side (not just the JS default) so a client-supplied chunk_size can't
+		// push a single request past a typical request timeout the way Scenario_Job::CHUNK_SIZE did.
+		$chunk_size = min( 75, max( 1, (int) ( $_POST['chunk_size'] ?? 75 ) ) );
 
 		$cleanup   = new Cleanup();
 		$removed   = $cleanup->cleanup_batch( $chunk_size );
