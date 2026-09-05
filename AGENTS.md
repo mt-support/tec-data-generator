@@ -55,6 +55,14 @@ add it to the main plugin's Composer/npm setup as out of scope unless the user e
   whatever was bound before), and every current/future call site that touches `tribe( 'tickets.rsvp' )` for
   ticket or attendee creation must go through it. Verify against a site that has actually completed the
   `rsvp-to-tc` migration (RSVP V2 active), not just a fresh V1 install — the divergence is invisible on V1.
+- **Don't call `tribe( 'tickets.rsvp' )->create_attendee_for_ticket()` for the standalone `add-attendees`
+  path** (fixed 2026-09-04, was fatal on Event Tickets 5.30) — it forwards its `$ticket` argument straight
+  into `Tribe__Tickets__Attendees::create_attendee( $ticket, $data )`, which only accepts a
+  `Tribe__Tickets__Ticket_Object|int`; a `WP_Post` fails `is_numeric()` and falls through to
+  `$ticket->get_provider()`, a fatal `\Error` — not an `\Exception`, so a `catch ( \Exception $e )` around it
+  never catches it and the CLI/AJAX request just dies. `Generator::add_attendees()`'s RSVP branch instead
+  calls the private `create_single_attendee()` writer directly (the same `wp_insert_post()` path
+  `generate_batch()` uses), sidestepping the ET API entirely.
 - **The `container`/`editor` generation options are presentation-only.** `container` (`mixed`/`event`/`page`)
   only restricts which container post types `generate_batch()` creates (note: `generate-events` only accepts
   `event`, not `page`, since Events have their own post type); `editor` (`classic`/`block`) only switches
@@ -88,13 +96,24 @@ add it to the main plugin's Composer/npm setup as out of scope unless the user e
   single WP option `Scenario_Job::OPTION_KEY` (not a transient — an "edge" run can take a long time, and a
   transient could expire mid-run). This is why "edge" scenarios are no longer CLI-only: the browser tab can be
   closed the moment the job is scheduled, and the admin page's polling resumes automatically on reload.
-- **Chunk everything reachable over HTTP.** The admin page's AJAX handlers must never attempt more than
-  ~100 units per request (timeout risk). WP-CLI has no such ceiling and is the recommended path for the full
-  5000+ run. Known limit (observed 2026-09-04): `Scenario_Job::CHUNK_SIZE` (100 units ≈ up to 300 tickets × 20
-  attendees) can exceed a 60s `max_execution_time` when the chunk runs over HTTP, failing the AS action with a
-  PHP fatal — which `process_chunk()`'s try/catch cannot catch, so the job option stays `running` and blocks
-  every later scenario until the option (`Scenario_Job::OPTION_KEY`) is cleared. Don't raise the chunk size;
-  if anything, lower it or add `set_time_limit( 0 )` to `process_chunk()`.
+- **Chunk everything reachable over HTTP.** The admin page's AJAX handlers must never attempt too many units
+  per request (timeout risk). WP-CLI has no such ceiling and is the recommended path for the full 5000+ run.
+  `Scenario_Job::CHUNK_SIZE` is 25 (fixed 2026-09-04, down from 100): on MAMP, a 100-unit chunk (up to 300
+  tickets × 20 attendees) reliably exceeded the request timeout when `start()`'s synchronous first-chunk call
+  ran over HTTP. The request being killed mid-`generate_batch()` left that chunk's rows in the DB without
+  `done` ever being persisted (that only happens after the whole chunk returns), so the next run/retry
+  regenerated the same offset — observed as roughly double tickets with half missing attendees. Don't raise
+  `CHUNK_SIZE` back up without also solving that persistence gap. `process_chunk()` already has
+  `set_time_limit( 0 )`, which doesn't help here since the constraint is the web server's/browser's request
+  timeout, not PHP's own script timeout.
+- **`process_chunk()` re-reads the live job option before persisting or rescheduling** (fixed 2026-09-04) —
+  `handle_cancel_scenario()` only deletes the option and unschedules *pending* Action Scheduler actions; it
+  can't stop a chunk already executing. Without the re-read, that in-flight chunk's stale in-memory `$job`
+  would get saved after cancel, resurrecting `status: running` and rescheduling another chunk, so a cancelled
+  scenario kept running to completion. The guard compares `status` and `run_id` against the freshly-fetched
+  option and bails (no save, no reschedule) if either no longer matches — in both the success path and the
+  `catch ( \Throwable $e )` path. Any future edit to `process_chunk()` that adds another `self::save( $job )`
+  call must re-fetch and re-check first, or this race comes back.
 - **Never call `migrations()->schedule()` directly from a button/command without the same status guard the
   core Migrations UI uses first** (`Migration::can_run()`/`can_revert()` in `class-migration.php`, mirroring
   `Utilities\Migration_UI::show_run()`/`show_rollback()` in the vendored `stellarwp/migrations` package).

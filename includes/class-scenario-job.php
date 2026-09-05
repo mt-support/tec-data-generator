@@ -13,7 +13,7 @@ class Scenario_Job {
 	const OPTION_KEY = 'tec_data_generator_scenario_job';
 	const AS_HOOK     = 'tec_data_generator_process_scenario_chunk';
 	const AS_GROUP    = 'tec-data-generator';
-	const CHUNK_SIZE  = 100;
+	const CHUNK_SIZE  = 25;
 
 	public function hook(): void {
 		add_action( self::AS_HOOK, [ $this, 'process_chunk' ] );
@@ -143,6 +143,14 @@ class Scenario_Job {
 				$job['done']          += $chunk;
 			}
 
+			// A cancel request (or a new scenario) may have replaced the option while this chunk's
+			// generate_batch() call was running. Re-check the live state before persisting or
+			// rescheduling, so an in-flight chunk can't resurrect a cancelled job or stomp a newer one.
+			$current = self::get();
+			if ( ! is_array( $current ) || 'running' !== $current['status'] || $current['run_id'] !== $job['run_id'] ) {
+				return;
+			}
+
 			if ( $job['done'] < $job['total'] ) {
 				self::save( $job );
 				as_enqueue_async_action( self::AS_HOOK, [], self::AS_GROUP );
@@ -165,9 +173,13 @@ class Scenario_Job {
 			$job['status'] = 'completed';
 			self::save( $job );
 		} catch ( \Throwable $e ) {
-			$job['status'] = 'failed';
-			$job['error']  = $e->getMessage();
-			self::save( $job );
+			// Same cancel/replace race as above: don't resurrect a cancelled (or superseded) job as "failed".
+			$current = self::get();
+			if ( is_array( $current ) && 'running' === $current['status'] && $current['run_id'] === $job['run_id'] ) {
+				$job['status'] = 'failed';
+				$job['error']  = $e->getMessage();
+				self::save( $job );
+			}
 		}
 	}
 

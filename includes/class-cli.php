@@ -384,6 +384,7 @@ class CLI {
 	 *     wp tec-data-generator generate-series --count=10 --events-per-series=3 --with-venues
 	 *     wp tec-data-generator generate-series --count=3 --with-venues --with-organizers --ticket-type=paid
 	 *
+	 * @subcommand generate-series
 	 * @when after_wp_load
 	 */
 	public function generate_series( $args, $assoc_args ) {

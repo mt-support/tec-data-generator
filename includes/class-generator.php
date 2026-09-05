@@ -263,11 +263,13 @@ class Generator {
 
 	/**
 	 * Adds attendees to an existing ticket (RSVP or paid) — backs the standalone `add-attendees`
-	 * CLI/AJAX command. Branches by ticket post type because `Tribe__Tickets__RSVP` does not
-	 * override the base `create_attendee()` method: the generic `tribe( 'tickets.attendees' )`
-	 * dispatcher would route an RSVP ticket through a different, ORM-based code path than
-	 * `Tribe__Tickets__RSVP::create_attendee_for_ticket()` — calling the RSVP method directly is
-	 * the only way to guarantee the V1 meta shape this plugin depends on.
+	 * CLI/AJAX command. RSVP attendees are built directly via the same `wp_insert_post()` writer
+	 * `generate_batch()` uses (`create_single_attendee()`) rather than
+	 * `tribe( 'tickets.rsvp' )->create_attendee_for_ticket()`: that method forwards its `$ticket`
+	 * argument into Event Tickets 5.30's `Tribe__Tickets__Attendees::create_attendee()`, which only
+	 * accepts a `Tribe__Tickets__Ticket_Object|int` — a `WP_Post` fails its `is_numeric()` check and
+	 * falls through to `$ticket->get_provider()`, a fatal `\Error` (not an `\Exception`, so the old
+	 * `catch` here never caught it).
 	 *
 	 * @return int[] Created attendee IDs.
 	 */
@@ -280,35 +282,38 @@ class Generator {
 		}
 
 		$is_rsvp = 'tribe_rsvp_tickets' === $ticket_post->post_type;
+		$event_id = $is_rsvp ? (int) get_post_meta( $ticket_id, '_tribe_rsvp_for_event', true ) : 0;
+
+		if ( $is_rsvp && ! $event_id ) {
+			return [];
+		}
 
 		for ( $i = 0; $i < $quantity; $i++ ) {
-			[ $full_name, $email ] = Data::random_person( $ticket_id, $i );
-			$data = [
-				'full_name' => $full_name,
-				'email'     => $email,
-			];
-
 			$attendee_id = 0;
 
 			try {
 				if ( $is_rsvp ) {
-					$attendee_id = (int) $this->with_v1_rsvp_repositories( function () use ( $ticket_post, $data ) {
-						return tribe( 'tickets.rsvp' )->create_attendee_for_ticket( $ticket_post, $data );
-					} );
+					$status      = wp_rand( 1, 100 ) <= 90 ? 'yes' : 'no';
+					$attendee_id = $this->create_single_attendee( $ticket_id, $event_id, md5( uniqid( "adhoc-{$ticket_id}-{$i}", true ) ), $status, $i );
 				} else {
-					$attendee = tribe( 'tickets.attendees' )->create_attendee( $ticket_id, $data );
+					[ $full_name, $email ] = Data::random_person( $ticket_id, $i );
+					$attendee    = tribe( 'tickets.attendees' )->create_attendee( $ticket_id, [
+						'full_name' => $full_name,
+						'email'     => $email,
+					] );
 					$attendee_id = $attendee instanceof \WP_Post ? $attendee->ID : 0;
+
+					if ( $attendee_id ) {
+						$this->tag_generated( $attendee_id, 'attendee' );
+					}
 				}
-			} catch ( \Exception $e ) {
+			} catch ( \Throwable $e ) {
 				continue;
 			}
 
-			if ( ! $attendee_id ) {
-				continue;
+			if ( $attendee_id ) {
+				$attendee_ids[] = $attendee_id;
 			}
-
-			$this->tag_generated( $attendee_id, 'attendee' );
-			$attendee_ids[] = $attendee_id;
 		}
 
 		return $attendee_ids;
