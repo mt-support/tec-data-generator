@@ -40,6 +40,14 @@ class Data {
 	const VENUE_NAME_SUFFIXES = [ 'Hall', 'Room', 'Cafe', 'Arena', 'Theater' ];
 
 	/**
+	 * Solid background colors cycled across generated placeholder featured images.
+	 */
+	const FEATURED_IMAGE_COLORS = [
+		[ 0x4A, 0x6F, 0xA5 ], [ 0xC4, 0x62, 0x4A ], [ 0x5A, 0xA5, 0x6F ], [ 0xA5, 0x8F, 0x4A ],
+		[ 0x8F, 0x4A, 0xA5 ], [ 0x4A, 0xA5, 0x9E ], [ 0xA5, 0x4A, 0x6F ], [ 0x6F, 0x8F, 0x4A ],
+	];
+
+	/**
 	 * Fixed, real city/street combinations (not randomly generated) — ported directly from the
 	 * source repo, since this data was already hardcoded there, not Faker output.
 	 */
@@ -184,5 +192,28 @@ class Data {
 	 */
 	public static function new_run_id(): string {
 		return 'run_' . gmdate( 'Ymd_His' ) . '_' . substr( wp_generate_password( 12, false, false ), 0, 6 );
+	}
+
+	/**
+	 * Builds a small solid-color placeholder PNG (no external image service — this must work
+	 * offline, and no Faker/image library dependency is allowed). Returns '' if GD isn't
+	 * available so callers can skip featured-image creation instead of fataling.
+	 */
+	public static function placeholder_image_bytes( int $seq ): string {
+		if ( ! function_exists( 'imagecreatetruecolor' ) || ! function_exists( 'imagepng' ) ) {
+			return '';
+		}
+
+		[ $r, $g, $b ] = self::FEATURED_IMAGE_COLORS[ $seq % count( self::FEATURED_IMAGE_COLORS ) ];
+
+		$image = imagecreatetruecolor( 800, 450 );
+		imagefill( $image, 0, 0, imagecolorallocate( $image, $r, $g, $b ) );
+
+		ob_start();
+		imagepng( $image );
+		$bytes = ob_get_clean();
+		imagedestroy( $image );
+
+		return (string) $bytes;
 	}
 }

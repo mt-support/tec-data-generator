@@ -48,7 +48,7 @@ class Scenario_Job {
 	 *
 	 * @return array{success:bool,message?:string,job?:array<string,mixed>}
 	 */
-	public function start( string $type, int $min_attendees, int $max_attendees, bool $with_venues = false, bool $with_organizers = false ): array {
+	public function start( string $type, int $min_attendees, int $max_attendees, bool $with_venues = false, bool $with_organizers = false, string $date_start = '', string $date_end = '' ): array {
 		if ( ! self::is_available() ) {
 			return [
 				'success' => false,
@@ -87,6 +87,8 @@ class Scenario_Job {
 			'max_attendees'  => $max_attendees,
 			'with_venues'    => $with_venues,
 			'with_organizers'=> $with_organizers,
+			'date_start'     => $date_start,
+			'date_end'       => $date_end,
 			'done'           => 0,
 			'post_ids'       => [],
 			'ticket_total'   => 0,
@@ -135,6 +137,8 @@ class Scenario_Job {
 					'max_rsvps_per_unit' => $job['max_rsvps'],
 					'with_venues'        => $job['with_venues'] ?? false,
 					'with_organizers'    => $job['with_organizers'] ?? false,
+					'date_start'         => $job['date_start'] ?? '',
+					'date_end'           => $job['date_end'] ?? '',
 				] );
 
 				$job['post_ids']       = array_merge( $job['post_ids'], $result['post_ids'] );

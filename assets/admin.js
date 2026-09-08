@@ -51,6 +51,8 @@
 
 	var scenarioWithVenuesEl = document.getElementById( 'tec-data-generator-scenario-with-venues' );
 	var scenarioWithOrganizersEl = document.getElementById( 'tec-data-generator-scenario-with-organizers' );
+	var scenarioStartDateEl = document.getElementById( 'tec-data-generator-scenario-start-date' );
+	var scenarioEndDateEl = document.getElementById( 'tec-data-generator-scenario-end-date' );
 	var withVenuesEl = document.getElementById( 'tec-data-generator-with-venues' );
 	var withOrganizersEl = document.getElementById( 'tec-data-generator-with-organizers' );
 
@@ -184,7 +186,7 @@
 		}
 	}
 
-	function runEventsLoop( total, container, editor, withVenues, withOrganizers, eventTypes ) {
+	function runEventsLoop( total, container, editor, withVenues, withOrganizers, eventTypes, dateStart, dateEnd ) {
 		var runId = null;
 
 		function step() {
@@ -195,6 +197,8 @@
 				with_venues: withVenues,
 				with_organizers: withOrganizers,
 				event_types: ( eventTypes && eventTypes.length ? eventTypes : [ 'single' ] ).join( ',' ),
+				date_start: dateStart || '',
+				date_end: dateEnd || '',
 				chunk_size: TecDataGenerator.chunkSize,
 				run_id: runId || '',
 			} ).then( function ( res ) {
@@ -253,7 +257,7 @@
 		return step().then( refreshCounts );
 	}
 
-	function runSeriesLoop( total, eventsPerSeries, withVenues, withOrganizers, ticketType, minAttendees, maxAttendees ) {
+	function runSeriesLoop( total, eventsPerSeries, withVenues, withOrganizers, ticketType, minAttendees, maxAttendees, dateStart, dateEnd ) {
 		var runId = null;
 
 		function step() {
@@ -265,6 +269,8 @@
 				ticket_type: ticketType || 'rsvp',
 				min_attendees: minAttendees,
 				max_attendees: maxAttendees,
+				date_start: dateStart || '',
+				date_end: dateEnd || '',
 				chunk_size: TecDataGenerator.chunkSize,
 				run_id: runId || '',
 			} ).then( function ( res ) {
@@ -405,6 +411,8 @@
 				type: type,
 				with_venues: scenarioWithVenuesEl && scenarioWithVenuesEl.checked ? 1 : 0,
 				with_organizers: scenarioWithOrganizersEl && scenarioWithOrganizersEl.checked ? 1 : 0,
+				date_start: scenarioStartDateEl ? scenarioStartDateEl.value : '',
+				date_end: scenarioEndDateEl ? scenarioEndDateEl.value : '',
 			} ).then( function ( res ) {
 				if ( ! res || ! res.success ) {
 					var message = ( res && res.data && res.data.message ) || 'Error starting scenario. See console/logs for details.';
@@ -498,6 +506,8 @@
 				document.querySelectorAll( '.tec-data-generator-events-event-type:checked:not(:disabled)' ),
 				function ( el ) { return el.value; }
 			);
+			var dateStart = document.getElementById( 'tec-data-generator-events-start-date' ).value;
+			var dateEnd = document.getElementById( 'tec-data-generator-events-end-date' ).value;
 
 			eventsBtn.disabled = true;
 			if ( cleanupBtn ) {
@@ -516,7 +526,9 @@
 				editor,
 				withVenues && withVenues.checked ? 1 : 0,
 				withOrganizers && withOrganizers.checked ? 1 : 0,
-				eventTypes
+				eventTypes,
+				dateStart,
+				dateEnd
 			).finally( function () {
 				eventsBtn.disabled = false;
 				if ( cleanupBtn ) {
@@ -557,7 +569,9 @@
 				var maxT = parseInt( document.getElementById( 'tec-data-generator-tickets-max' ).value, 10 ) || 1;
 				var minAtt = parseInt( document.getElementById( 'tec-data-generator-tickets-min-attendees' ).value, 10 ) || 1;
 				var maxAtt = parseInt( document.getElementById( 'tec-data-generator-tickets-max-attendees' ).value, 10 ) || 20;
-				params = { total: total, container: container, editor: editor, ticket_type: ticketType, min_tickets: minT, max_tickets: maxT, min_attendees: minAtt, max_attendees: maxAtt, event_types: eventTypes.join( ',' ) };
+				var dateStart = document.getElementById( 'tec-data-generator-tickets-start-date' ).value;
+				var dateEnd = document.getElementById( 'tec-data-generator-tickets-end-date' ).value;
+				params = { total: total, container: container, editor: editor, ticket_type: ticketType, min_tickets: minT, max_tickets: maxT, min_attendees: minAtt, max_attendees: maxAtt, event_types: eventTypes.join( ',' ), date_start: dateStart, date_end: dateEnd };
 			}
 
 			ticketsBtn.disabled = true;
@@ -594,6 +608,8 @@
 			var withOrganizers = document.getElementById( 'tec-data-generator-series-with-organizers' );
 			var minAttendees = parseInt( document.getElementById( 'tec-data-generator-series-min-attendees' ).value, 10 ) || 1;
 			var maxAttendees = parseInt( document.getElementById( 'tec-data-generator-series-max-attendees' ).value, 10 ) || 20;
+			var dateStart = document.getElementById( 'tec-data-generator-series-start-date' ).value;
+			var dateEnd = document.getElementById( 'tec-data-generator-series-end-date' ).value;
 
 			seriesBtn.disabled = true;
 			if ( eventsBtn ) {
@@ -616,7 +632,9 @@
 				withOrganizers && withOrganizers.checked ? 1 : 0,
 				ticketType,
 				minAttendees,
-				maxAttendees
+				maxAttendees,
+				dateStart,
+				dateEnd
 			).finally( function () {
 				seriesBtn.disabled = false;
 				if ( eventsBtn ) {

@@ -148,6 +148,7 @@ class Cleanup {
 			'tribe_rsvp_attendees' => 'attendee',
 			'tribe_venue'          => 'venue',
 			'tribe_organizer'      => 'organizer',
+			'attachment'           => 'image',
 		];
 
 		$out = [];
