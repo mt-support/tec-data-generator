@@ -69,6 +69,15 @@ add it to the main plugin's Composer/npm setup as out of scope unless the user e
   container `post_content` between plain text and Gutenberg markup (tagged via `Data::EDITOR_META_KEY`).
   Neither may branch ticket creation — tickets always go through the production `ticket_add()` path
   regardless of editor. Don't invent a "block ticket" storage shape.
+- **Event start dates are randomized within a `date_start`/`date_end` range, not sequential.** `Generator::normalize_date_range()`
+  (called from `generate_batch()` and `generate_series()`, both before `create_single_event()` can be reached)
+  turns the `date_start`/`date_end` options — raw strings from CLI flags (`--start-date`/`--end-date`) or
+  AJAX/Scenario_Job state — into `DateTimeImmutable` bounds, defaulting to "now" through two weeks out when
+  either is unset. `create_single_event()` picks a random moment in that range via `random_event_start()`
+  instead of the old sequential `+{$seq} hours` offset. Every entry point that can create Event containers
+  (`generate`, `generate-events`, `generate-tickets`'s new-container path, `generate-series`, `scenario`,
+  and `Scenario_Job::process_chunk()`) must thread `date_start`/`date_end` through to `generate_batch()`/
+  `generate_series()` — don't add a new container-creating path that bypasses `normalize_date_range()`.
 - **Every post/ticket/attendee created must be tagged** with `TEC\DataGenerator\Data::GENERATED_META_KEY` (and a
   run ID). `Cleanup` relies entirely on this meta to decide what it's allowed to delete — never add a deletion
   path that queries by anything else (e.g. post title prefix, date range), since that risks deleting real site
@@ -159,6 +168,11 @@ wp tec-data-generator generate-tickets --event-id=123 --quantity=5
 # 1d. ...or generate event series: grouped events with different venues/organizers linked together.
 wp tec-data-generator generate-series --count=5 --events-per-series=3 --with-venues --with-organizers
 wp tec-data-generator generate-series --count=10 --events-per-series=2 --ticket-type=paid
+
+# 1e. Every event-creating command above accepts --start-date/--end-date (any strtotime()-parsable
+#     value) to control the range each event's start date is randomly drawn from. Omit either and it
+#     defaults to now through two weeks out.
+wp tec-data-generator generate --count=30 --start-date=2026-11-01 --end-date=2026-12-01
 
 # 2. Migrate it (schedules the full rsvp-to-tc run in the background via Shepherd/Action Scheduler —
 #    this returns immediately, it does NOT wait for the migration to finish).

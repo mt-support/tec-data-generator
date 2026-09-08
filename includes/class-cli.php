@@ -58,6 +58,18 @@ class CLI {
 	 *   - none
 	 * ---
 	 *
+	 * [--start-date=<date>]
+	 * : Earliest date/time (any strtotime()-parsable value) generated events can fall on.
+	 * ---
+	 * default: now
+	 * ---
+	 *
+	 * [--end-date=<date>]
+	 * : Latest date/time generated events can fall on.
+	 * ---
+	 * default: +2 weeks from --start-date
+	 * ---
+	 *
 	 * ## EXAMPLES
 	 *
 	 *     wp tec-data-generator generate --count=5000
@@ -85,6 +97,8 @@ class CLI {
 			'with_organizers' => isset( $assoc_args['with-organizers'] ),
 			'event_types'     => isset( $assoc_args['event-types'] ) ? explode( ',', (string) $assoc_args['event-types'] ) : [ 'single' ],
 			'ticket_type'     => $assoc_args['ticket-type'] ?? 'rsvp',
+			'date_start'      => $assoc_args['start-date'] ?? '',
+			'date_end'        => $assoc_args['end-date'] ?? '',
 		];
 
 		\WP_CLI::log( "Starting generation of {$count} units (run: {$run_id})..." );
@@ -140,6 +154,18 @@ class CLI {
 	 * [--with-organizers]
 	 * : Attach a random generated Organizer to each Event container.
 	 *
+	 * [--start-date=<date>]
+	 * : Earliest date/time (any strtotime()-parsable value) generated events can fall on.
+	 * ---
+	 * default: now
+	 * ---
+	 *
+	 * [--end-date=<date>]
+	 * : Latest date/time generated events can fall on.
+	 * ---
+	 * default: +2 weeks from --start-date
+	 * ---
+	 *
 	 * ## EXAMPLES
 	 *
 	 *     wp tec-data-generator generate-events --count=50
@@ -164,6 +190,8 @@ class CLI {
 			'with_venues'     => isset( $assoc_args['with-venues'] ),
 			'with_organizers' => isset( $assoc_args['with-organizers'] ),
 			'event_types'     => isset( $assoc_args['event-types'] ) ? explode( ',', (string) $assoc_args['event-types'] ) : [ 'single' ],
+			'date_start'      => $assoc_args['start-date'] ?? '',
+			'date_end'        => $assoc_args['end-date'] ?? '',
 		];
 
 		\WP_CLI::log( "Starting events-only generation of {$count} containers (run: {$run_id})..." );
@@ -257,6 +285,18 @@ class CLI {
 	 * default: single
 	 * ---
 	 *
+	 * [--start-date=<date>]
+	 * : Earliest date/time (any strtotime()-parsable value) new event containers can fall on. Ignored with --event-id.
+	 * ---
+	 * default: now
+	 * ---
+	 *
+	 * [--end-date=<date>]
+	 * : Latest date/time new event containers can fall on. Ignored with --event-id.
+	 * ---
+	 * default: +2 weeks from --start-date
+	 * ---
+	 *
 	 * ## EXAMPLES
 	 *
 	 *     wp tec-data-generator generate-tickets --count=10 --container=event --editor=block
@@ -318,6 +358,8 @@ class CLI {
 			'container'          => $assoc_args['container'] ?? 'event',
 			'editor'             => $assoc_args['editor'] ?? 'classic',
 			'event_types'        => isset( $assoc_args['event-types'] ) ? explode( ',', (string) $assoc_args['event-types'] ) : [ 'single' ],
+			'date_start'         => $assoc_args['start-date'] ?? '',
+			'date_end'           => $assoc_args['end-date'] ?? '',
 		];
 
 		\WP_CLI::log( "Starting tickets generation on {$count} new {$options['container']} containers (run: {$run_id})..." );
@@ -378,6 +420,18 @@ class CLI {
 	 * default: 5
 	 * ---
 	 *
+	 * [--start-date=<date>]
+	 * : Earliest date/time (any strtotime()-parsable value) generated events can fall on.
+	 * ---
+	 * default: now
+	 * ---
+	 *
+	 * [--end-date=<date>]
+	 * : Latest date/time generated events can fall on.
+	 * ---
+	 * default: +2 weeks from --start-date
+	 * ---
+	 *
 	 * ## EXAMPLES
 	 *
 	 *     wp tec-data-generator generate-series --count=5 --events-per-series=5
@@ -406,6 +460,8 @@ class CLI {
 			'with_organizers'  => isset( $assoc_args['with-organizers'] ),
 			'ticket_type'      => $ticket_type,
 			'editor'           => 'classic',
+			'date_start'       => $assoc_args['start-date'] ?? '',
+			'date_end'         => $assoc_args['end-date'] ?? '',
 		];
 
 		\WP_CLI::log( "Starting series generation of {$count} series with {$events_per_series} events each (run: {$run_id})..." );
@@ -472,6 +528,18 @@ class CLI {
 	 * [--with-organizers]
 	 * : Attach a random generated Organizer to each Event unit.
 	 *
+	 * [--start-date=<date>]
+	 * : Earliest date/time (any strtotime()-parsable value) generated events can fall on.
+	 * ---
+	 * default: now
+	 * ---
+	 *
+	 * [--end-date=<date>]
+	 * : Latest date/time generated events can fall on.
+	 * ---
+	 * default: +2 weeks from --start-date
+	 * ---
+	 *
 	 * ## EXAMPLES
 	 *
 	 *     wp tec-data-generator scenario --type=usual
@@ -512,6 +580,8 @@ class CLI {
 			'max_rsvps_per_unit' => $preset['rsvps_max'],
 			'with_venues'        => isset( $assoc_args['with-venues'] ),
 			'with_organizers'    => isset( $assoc_args['with-organizers'] ),
+			'date_start'         => $assoc_args['start-date'] ?? '',
+			'date_end'           => $assoc_args['end-date'] ?? '',
 		];
 
 		\WP_CLI::log( "Generating {$unit_count} units (run: {$run_id})..." );

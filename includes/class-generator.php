@@ -82,6 +82,7 @@ class Generator {
 		$this->options['ticket_type'] = $this->options['ticket_type'] ?? 'rsvp';
 		$this->options['container'] = $this->normalize_container( $this->options['container'] ?? 'mixed' );
 		$this->options['editor'] = $this->normalize_editor( $this->options['editor'] ?? 'classic' );
+		$this->normalize_date_range();
 		$this->validate_options();
 
 		return $this->run_with_performance_guards( function () use ( $count, $offset ) {
@@ -342,6 +343,7 @@ class Generator {
 		$this->options['ticket_type'] = $this->options['ticket_type'] ?? 'rsvp';
 		$this->options['editor'] = $this->normalize_editor( $this->options['editor'] ?? 'classic' );
 		$this->options['event_types'] = [ 'single' ];
+		$this->normalize_date_range();
 
 		return $this->run_with_performance_guards( function () use ( $count, $offset, $events_per_series ) {
 			$series_ids   = [];
@@ -524,13 +526,13 @@ class Generator {
 	 * the block editor. Ticket creation is unaffected (always the production ticket_add()
 	 * path) — this is presentation only.
 	 */
-	private function container_content( string $plain, string $title, bool $is_event = false ): string {
+	private function container_content( string $plain, string $title, bool $is_event = false, int $venue_id = 0, int $organizer_id = 0 ): string {
 		if ( ( $this->options['editor'] ?? 'classic' ) !== 'block' ) {
 			return $plain;
 		}
 
 		if ( $is_event ) {
-			return $this->event_block_content( $plain );
+			return $this->event_block_content( $plain, $venue_id, $organizer_id );
 		}
 
 		return sprintf(
@@ -547,22 +549,74 @@ class Generator {
 	 * website/links from TEC core, related-events from Events Pro, tickets/rsvp from Event
 	 * Tickets). All of these are dynamic blocks that render live from post meta, so this is
 	 * just the markup shape — it doesn't create tickets itself.
+	 *
+	 * The organizer/venue blocks are the one exception to "renders live from post meta": their
+	 * block-editor preview (Redux store, populated by REST fetch) reads only the `organizer`/
+	 * `venue` ID from the block's own JSON attributes, never falling back to
+	 * `_EventOrganizerID`/`_EventVenueID` post meta — so a self-closing block with no attributes
+	 * shows an empty "no organizer/venue set" placeholder in the editor even though the meta
+	 * link (and therefore the front end, which the render template reads meta for at display
+	 * time) is correct. Embedding the linked ID here is what makes the editor preview match.
 	 */
-	private function event_block_content( string $plain ): string {
+	private function event_block_content( string $plain, int $venue_id = 0, int $organizer_id = 0 ): string {
+		$organizer_block = $organizer_id
+			? sprintf( '<!-- wp:tribe/event-organizer {"organizer":%d} /-->', $organizer_id )
+			: '<!-- wp:tribe/event-organizer /-->';
+
+		$venue_block = $venue_id
+			? sprintf( '<!-- wp:tribe/event-venue {"venue":%d} /-->', $venue_id )
+			: '<!-- wp:tribe/event-venue /-->';
+
 		$blocks = [
 			'<!-- wp:tribe/event-datetime /-->',
-			sprintf( "<!-- wp:paragraph -->\n<p>%s</p>\n<!-- /wp:paragraph -->", esc_html( wp_strip_all_tags( $plain ) ) ),
+			sprintf( '<!-- wp:paragraph {"placeholder":"Add Description..."} -->\n<p>%s</p>\n<!-- /wp:paragraph -->', esc_html( wp_strip_all_tags( $plain ) ) ),
 			'<!-- wp:tribe/event-price /-->',
-			'<!-- wp:tribe/event-organizer /-->',
-			'<!-- wp:tribe/event-venue /-->',
+			$organizer_block,
+			$venue_block,
 			'<!-- wp:tribe/event-website /-->',
 			'<!-- wp:tribe/event-links /-->',
 			'<!-- wp:tribe/related-events /-->',
-			'<!-- wp:tribe/tickets /-->',
+			"<!-- wp:tribe/tickets -->\n<div class=\"wp-block-tribe-tickets\"></div>\n<!-- /wp:tribe/tickets -->",
 			'<!-- wp:tribe/rsvp /-->',
 		];
 
 		return implode( "\n\n", $blocks );
+	}
+
+	/**
+	 * Normalizes the date_start/date_end options into DateTimeImmutable bounds events are
+	 * randomly placed within. Defaults to "now" through two weeks out when unset.
+	 *
+	 * @throws \Exception On an unparsable date or a range where start is after end.
+	 */
+	private function normalize_date_range(): void {
+		$tz    = wp_timezone();
+		$start = $this->options['date_start'] ?? '';
+		$end   = $this->options['date_end'] ?? '';
+
+		$this->options['date_start'] = $start
+			? new \DateTimeImmutable( $start, $tz )
+			: new \DateTimeImmutable( 'now', $tz );
+
+		$this->options['date_end'] = $end
+			? new \DateTimeImmutable( $end, $tz )
+			: $this->options['date_start']->modify( '+2 weeks' );
+
+		if ( $this->options['date_start'] > $this->options['date_end'] ) {
+			throw new \Exception( 'date_start must be before date_end.' );
+		}
+	}
+
+	/**
+	 * Picks a random moment within the configured date_start/date_end range.
+	 */
+	private function random_event_start(): \DateTimeImmutable {
+		/** @var \DateTimeImmutable $start */
+		$start = $this->options['date_start'];
+		/** @var \DateTimeImmutable $end */
+		$end = $this->options['date_end'];
+
+		return $start->setTimestamp( wp_rand( $start->getTimestamp(), $end->getTimestamp() ) );
 	}
 
 	/**
@@ -761,7 +815,7 @@ class Generator {
 			return 0;
 		}
 
-		$start = ( new \DateTimeImmutable( 'now', wp_timezone() ) )->modify( "+{$seq} hours" );
+		$start = $this->random_event_start();
 		$end   = $start->modify( '+2 hours' );
 
 		$organizer_name = $organizer_id ? get_the_title( $organizer_id ) : '';
@@ -775,7 +829,7 @@ class Generator {
 			'status'     => 'publish',
 			'start_date' => $start->format( 'Y-m-d H:i:s' ),
 			'end_date'   => $end->format( 'Y-m-d H:i:s' ),
-			'content'    => $this->container_content( $plain, $title, true ),
+			'content'    => $this->container_content( $plain, $title, true, $venue_id, $organizer_id ),
 		];
 
 		if ( $venue_id ) {
@@ -1175,6 +1229,77 @@ class Generator {
 		update_post_meta( $post_id, Data::GENERATED_META_KEY, 1 );
 		update_post_meta( $post_id, Data::RUN_ID_META_KEY, $this->run_id );
 		update_post_meta( $post_id, Data::POST_KIND_META_KEY, $kind );
+
+		if ( 'featured_image' !== $kind ) {
+			$this->maybe_attach_featured_image( $post_id );
+		}
+	}
+
+	/**
+	 * Attaches a generated placeholder image as the post's featured image, for any generated
+	 * post type that actually declares thumbnail support (events/pages/posts/venues/organizers/
+	 * series — whichever of those support it). The attachment's `post_parent` is set to $post_id,
+	 * so Cleanup's existing `wp_delete_post( $id, true )` calls already cascade-delete it (WordPress
+	 * core force-deletes child attachments of a force-deleted post) — tagging it is just a safety
+	 * net in case it's ever found separated from its parent.
+	 */
+	private function maybe_attach_featured_image( int $post_id ): void {
+		$post_type = get_post_type( $post_id );
+
+		if ( ! $post_type || ! post_type_supports( $post_type, 'thumbnail' ) ) {
+			return;
+		}
+
+		$bytes = $this->fetch_picsum_image( $post_id );
+
+		if ( ! $bytes ) {
+			$bytes = Data::placeholder_image_bytes( $post_id );
+		}
+
+		if ( ! $bytes ) {
+			return;
+		}
+
+		$upload = wp_upload_bits( "loadgen-{$post_id}.png", null, $bytes );
+
+		if ( ! empty( $upload['error'] ) ) {
+			return;
+		}
+
+		$attachment_id = wp_insert_attachment( [
+			'post_parent'    => $post_id,
+			'post_mime_type' => 'image/png',
+			'post_title'     => 'Loadgen Featured Image',
+			'post_status'    => 'inherit',
+		], $upload['file'], $post_id );
+
+		if ( ! $attachment_id || is_wp_error( $attachment_id ) ) {
+			return;
+		}
+
+		require_once ABSPATH . 'wp-admin/includes/image.php';
+
+		$metadata = wp_generate_attachment_metadata( $attachment_id, $upload['file'] );
+		wp_update_attachment_metadata( $attachment_id, $metadata );
+		set_post_thumbnail( $post_id, $attachment_id );
+
+		$this->tag_generated( (int) $attachment_id, 'featured_image' );
+	}
+
+	/**
+	 * Fetches a real placeholder photo from picsum.photos, seeded by $seed so the same
+	 * generated post always gets the same image on re-inspection. Returns '' on any
+	 * WP_Error/non-200/timeout so the caller falls back to the locally-generated placeholder —
+	 * this must never block or fail a run just because picsum is unreachable.
+	 */
+	private function fetch_picsum_image( int $seed ): string {
+		$response = wp_remote_get( "https://picsum.photos/seed/{$seed}/800/450", [ 'timeout' => 5 ] );
+
+		if ( is_wp_error( $response ) || 200 !== wp_remote_retrieve_response_code( $response ) ) {
+			return '';
+		}
+
+		return (string) wp_remote_retrieve_body( $response );
 	}
 
 	/**

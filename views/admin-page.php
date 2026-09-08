@@ -116,6 +116,14 @@ if ( ! defined( 'ABSPATH' ) ) {
 					<label><input type="checkbox" id="tec-data-generator-scenario-with-organizers"> <?php esc_html_e( 'Organizers', 'tec-data-generator' ); ?></label>
 				</td>
 			</tr>
+			<tr>
+				<th><?php esc_html_e( 'Date range', 'tec-data-generator' ); ?></th>
+				<td>
+					<label><?php esc_html_e( 'From', 'tec-data-generator' ); ?> <input type="date" id="tec-data-generator-scenario-start-date"></label>
+					<label><?php esc_html_e( 'To', 'tec-data-generator' ); ?> <input type="date" id="tec-data-generator-scenario-end-date"></label>
+					<p class="description"><?php esc_html_e( 'Defaults to today through two weeks out.', 'tec-data-generator' ); ?></p>
+				</td>
+			</tr>
 		</table>
 		<p>
 			<button type="button" class="button button-primary" id="tec-data-generator-scenario-btn">
@@ -209,6 +217,14 @@ if ( ! defined( 'ABSPATH' ) ) {
 					<label title="<?php esc_attr_e( 'Requires ECP plugin', 'tec-data-generator' ); ?>"><input type="checkbox" class="tec-data-generator-events-event-type" value="virtual" <?php disabled( empty( $plugin_availability['has_ecp'] ) ); ?>> <?php esc_html_e( 'Virtual', 'tec-data-generator' ); ?><?php if ( empty( $plugin_availability['has_ecp'] ) ) : ?> (<?php esc_html_e( 'requires ECP', 'tec-data-generator' ); ?>)<?php endif; ?></label>
 				</td>
 			</tr>
+			<tr>
+				<th><?php esc_html_e( 'Date range', 'tec-data-generator' ); ?></th>
+				<td>
+					<label><?php esc_html_e( 'From', 'tec-data-generator' ); ?> <input type="date" id="tec-data-generator-events-start-date"></label>
+					<label><?php esc_html_e( 'To', 'tec-data-generator' ); ?> <input type="date" id="tec-data-generator-events-end-date"></label>
+					<p class="description"><?php esc_html_e( 'Defaults to today through two weeks out.', 'tec-data-generator' ); ?></p>
+				</td>
+			</tr>
 		</table>
 
 		<p>
@@ -290,6 +306,14 @@ if ( ! defined( 'ABSPATH' ) ) {
 					<label title="<?php esc_attr_e( 'Requires ECP plugin', 'tec-data-generator' ); ?>"><input type="checkbox" class="tec-data-generator-tickets-event-type" value="virtual" <?php disabled( empty( $plugin_availability['has_ecp'] ) ); ?>> <?php esc_html_e( 'Virtual', 'tec-data-generator' ); ?></label>
 				</td>
 			</tr>
+			<tr>
+				<th><?php esc_html_e( 'Date range (new events only)', 'tec-data-generator' ); ?></th>
+				<td>
+					<label><?php esc_html_e( 'From', 'tec-data-generator' ); ?> <input type="date" id="tec-data-generator-tickets-start-date"></label>
+					<label><?php esc_html_e( 'To', 'tec-data-generator' ); ?> <input type="date" id="tec-data-generator-tickets-end-date"></label>
+					<p class="description"><?php esc_html_e( 'Defaults to today through two weeks out.', 'tec-data-generator' ); ?></p>
+				</td>
+			</tr>
 		</table>
 
 		<p>
@@ -343,6 +367,14 @@ if ( ! defined( 'ABSPATH' ) ) {
 				<td>
 					<label><?php esc_html_e( 'Min', 'tec-data-generator' ); ?> <input type="number" id="tec-data-generator-series-min-attendees" value="1" min="1" step="1" class="small-text"></label>
 					<label><?php esc_html_e( 'Max', 'tec-data-generator' ); ?> <input type="number" id="tec-data-generator-series-max-attendees" value="20" min="1" step="1" class="small-text"></label>
+				</td>
+			</tr>
+			<tr>
+				<th><?php esc_html_e( 'Date range', 'tec-data-generator' ); ?></th>
+				<td>
+					<label><?php esc_html_e( 'From', 'tec-data-generator' ); ?> <input type="date" id="tec-data-generator-series-start-date"></label>
+					<label><?php esc_html_e( 'To', 'tec-data-generator' ); ?> <input type="date" id="tec-data-generator-series-end-date"></label>
+					<p class="description"><?php esc_html_e( 'Defaults to today through two weeks out.', 'tec-data-generator' ); ?></p>
 				</td>
 			</tr>
 		</table>

@@ -69,6 +69,19 @@ varied, realistic-looking titles/descriptions instead of `"Loadgen Event {n}"`. 
 [`tribe-ext-test-data-generator`](https://github.com/mt-support/tribe-ext-test-data-generator), rewritten
 against this plugin's own built-in name/content pools instead of that repo's Faker dependency.
 
+### Event date range (optional)
+
+Every command that creates Event containers (`generate`, `generate-events`, `generate-tickets` for new
+containers, `generate-series`, `scenario`) picks each event's start date/time at random from a configurable
+range via `--start-date`/`--end-date` (any `strtotime()`-parsable value, e.g. `2026-10-01` or
+`2026-10-01 09:00:00`). Leave either unset and it defaults to **now through two weeks out** — the same as
+before this option existed. The admin page exposes the same range as a "From"/"To" date pair on each matching
+section.
+
+```bash
+wp tec-data-generator generate --count=50 --start-date=2026-11-01 --end-date=2026-12-01
+```
+
 ## Commands
 
 WP-CLI is recommended for anything beyond a few hundred tickets — it has no request-timeout ceiling, unlike
@@ -86,7 +99,8 @@ wp tec-data-generator generate --count=200 --min-attendees=5 --max-attendees=50
 
 Flags: `--count` (default 5000), `--min-attendees` (default 1), `--max-attendees` (default 20),
 `--batch-size` (default 100 — how many units are generated per internal progress tick; does not change the
-total, just how often it logs).
+total, just how often it logs), `--start-date`/`--end-date` (see [Event date range](#event-date-range-optional)
+above; default now through +2 weeks).
 
 #### Event types and ticket types
 
@@ -135,7 +149,8 @@ wp tec-data-generator scenario --type=edge
 ```
 
 Flags: `--type` (required, `usual` or `edge`), plus the same `--min-attendees`/`--max-attendees` (defaults
-1/20) and `--batch-size` (default 100) as `generate`. Presets (`includes/class-data.php`):
+1/20), `--batch-size` (default 100), and `--start-date`/`--end-date` (default now through +2 weeks) as
+`generate`. Presets (`includes/class-data.php`):
 
 | type    | units          | RSVP tickets/unit | orphan rate |
 |---------|----------------|--------------------|-------------|
@@ -153,8 +168,8 @@ wp tec-data-generator generate-events --count=20                 # classic edito
 ```
 
 Flags: `--count` (default 100), `--editor` (see [Container editor](#container-editor-classic--block) below),
-`--event-types` (see above), `--batch-size` (default 100), `--with-venues`/`--with-organizers`. Always creates
-containers with `ticket_type=none`.
+`--event-types` (see above), `--batch-size` (default 100), `--with-venues`/`--with-organizers`,
+`--start-date`/`--end-date` (default now through +2 weeks). Always creates containers with `ticket_type=none`.
 
 ### `generate-tickets`
 
@@ -169,9 +184,10 @@ wp tec-data-generator generate-tickets --event-id=123 --quantity=5 --ticket-type
 ```
 
 Flags: without `--event-id`, creates `--count` fresh containers (default 10, `--container`/`--editor`/
-`--event-types` as above) with `--min-tickets`/`--max-tickets` per container (defaults 1/1) and
-`--min-attendees`/`--max-attendees` per ticket (defaults 1/20); with `--event-id`, attaches `--quantity`
-tickets (default 5) to that existing post instead. `--ticket-type` is `rsvp` (default) or `paid`.
+`--event-types` as above) with `--min-tickets`/`--max-tickets` per container (defaults 1/1),
+`--min-attendees`/`--max-attendees` per ticket (defaults 1/20), and `--start-date`/`--end-date` (default now
+through +2 weeks, ignored with `--event-id`); with `--event-id`, attaches `--quantity` tickets (default 5) to
+that existing post instead. `--ticket-type` is `rsvp` (default) or `paid`.
 
 ### `generate-series`
 
@@ -188,7 +204,8 @@ wp tec-data-generator generate-series --count=3 --events-per-series=2 --ticket-t
 Flags: `--count` (default 5 — how many series to create), `--events-per-series` (default 5 — events per
 series), `--with-venues` (attach a different random venue to each event), `--with-organizers` (attach a
 different random organizer to each event), `--ticket-type` (`rsvp` (default), `paid`, or `none`),
-`--min-attendees` (default 1), `--max-attendees` (default 20), `--batch-size` (default 5).
+`--min-attendees` (default 1), `--max-attendees` (default 20), `--batch-size` (default 5),
+`--start-date`/`--end-date` (default now through +2 weeks).
 
 Each event in a series is created as a regular Event and linked to the series via the `tec_series_relationships`
 table. All events are tagged with the usual generated marker and run ID, so `cleanup` removes the entire series
@@ -254,7 +271,8 @@ operation yet — see "Migration controls" below.
 
 Go to **Tools → TEC Data Generator**. The page has these sections:
 
-- **Scenario (recommended)** — pick **Usual** or **Edge case** from the dropdown and click **Generate
+- **Scenario (recommended)** — pick **Usual** or **Edge case** from the dropdown, optionally set a date range
+  (From/To, defaults to today through two weeks out) and venue/organizer attachments, and click **Generate
   scenario**. Both run entirely in the background via Action Scheduler (the same mechanism the migration
   controls below already use): the button schedules the job and returns immediately, resolving a concrete unit
   count and orphan rate via `wp_rand()` just like the CLI's `scenario` command. **You can close the tab or
@@ -265,13 +283,16 @@ Go to **Tools → TEC Data Generator**. The page has these sections:
   already exists (generated by this tool or not), via the `add-rsvp` / `add-tickets` / `add-attendees` AJAX
   actions.
 - **Generate Events (containers only, no tickets)** — total count, editor radio (Classic/Block),
-  venues/organizers, event types, and a **Generate events** button, chunked via AJAX with a progress bar.
+  venues/organizers, event types, a date range (From/To, defaults to today through two weeks out), and a
+  **Generate events** button, chunked via AJAX with a progress bar.
 - **Generate Tickets (with attendees)** — total containers (or an existing event/page ID + quantity to skip
   creating containers), container/ticket-type/editor radios, tickets-per-container and attendees-per-ticket
-  ranges, event types, and a **Generate tickets** button, chunked via AJAX with a progress bar.
+  ranges, event types, a date range for new containers (From/To, defaults to today through two weeks out), and
+  a **Generate tickets** button, chunked via AJAX with a progress bar.
 - **Generate Series** — total series and events per series, per-event venue/organizer toggles, ticket type,
-  attendees range, and a **Generate series** button, chunked via AJAX with a progress bar. Creates linked event
-  groups where each event can have different venues/organizers.
+  attendees range, a date range (From/To, defaults to today through two weeks out), and a **Generate series**
+  button, chunked via AJAX with a progress bar. Creates linked event groups where each event can have
+  different venues/organizers.
 - **Cleanup** — the red **Cleanup all generated data** button lives here, at the end, right before Migration
   controls. Deletes everything this tool ever generated across all runs (events, pages, posts, venues,
   organizers, RSVP and paid tickets including Tickets Commerce ones, attendees, classic and block) — only

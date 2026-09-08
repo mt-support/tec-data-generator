@@ -74,6 +74,8 @@ class Ajax {
 					'with_organizers' => ! empty( $_POST['with_organizers'] ),
 					'event_types'     => $raw_event_types,
 					'ticket_type'     => $raw_ticket_type,
+					'date_start'      => $this->post_date( 'date_start' ),
+					'date_end'        => $this->post_date( 'date_end' ),
 				];
 			},
 			function ( $generator, $run_id, &$state, $this_run ) {
@@ -84,6 +86,8 @@ class Ajax {
 					'with_organizers' => $state['with_organizers'] ?? false,
 					'event_types'     => $state['event_types'] ?? 'single',
 					'ticket_type'     => $state['ticket_type'] ?? 'rsvp',
+					'date_start'      => $state['date_start'] ?? '',
+					'date_end'        => $state['date_end'] ?? '',
 				] );
 			}
 		);
@@ -111,6 +115,8 @@ class Ajax {
 					'event_types'     => $raw_event_types,
 					'container'       => 'event',
 					'editor'          => in_array( $editor, [ 'classic', 'block' ], true ) ? $editor : 'classic',
+					'date_start'      => $this->post_date( 'date_start' ),
+					'date_end'        => $this->post_date( 'date_end' ),
 				];
 			},
 			function ( $generator, $run_id, &$state, $this_run ) {
@@ -121,6 +127,8 @@ class Ajax {
 					'event_types'     => $state['event_types'] ?? 'single',
 					'container'       => $state['container'] ?? 'event',
 					'editor'          => $state['editor'] ?? 'classic',
+					'date_start'      => $state['date_start'] ?? '',
+					'date_end'        => $state['date_end'] ?? '',
 				] );
 			}
 		);
@@ -201,6 +209,8 @@ class Ajax {
 					'container'       => in_array( $container, [ 'event', 'page' ], true ) ? $container : 'event',
 					'editor'          => in_array( $editor, [ 'classic', 'block' ], true ) ? $editor : 'classic',
 					'ticket_type'     => in_array( $ticket_type, [ 'rsvp', 'paid' ], true ) ? $ticket_type : 'rsvp',
+					'date_start'      => $this->post_date( 'date_start' ),
+					'date_end'        => $this->post_date( 'date_end' ),
 				];
 			},
 			function ( $generator, $run_id, &$state, $this_run ) {
@@ -213,6 +223,8 @@ class Ajax {
 					'container'          => $state['container'] ?? 'event',
 					'editor'             => $state['editor'] ?? 'classic',
 					'ticket_type'        => $state['ticket_type'] ?? 'rsvp',
+					'date_start'         => $state['date_start'] ?? '',
+					'date_end'           => $state['date_end'] ?? '',
 				] );
 			}
 		);
@@ -241,6 +253,8 @@ class Ajax {
 					'with_venues'        => ! empty( $_POST['with_venues'] ),
 					'with_organizers'    => ! empty( $_POST['with_organizers'] ),
 					'ticket_type'        => in_array( $ticket_type, [ 'rsvp', 'paid', 'none' ], true ) ? $ticket_type : 'rsvp',
+					'date_start'         => $this->post_date( 'date_start' ),
+					'date_end'           => $this->post_date( 'date_end' ),
 				];
 			},
 			function ( $generator, $run_id, &$state, $this_run ) {
@@ -250,6 +264,8 @@ class Ajax {
 					'with_venues'      => $state['with_venues'],
 					'with_organizers'  => $state['with_organizers'],
 					'ticket_type'      => $state['ticket_type'],
+					'date_start'       => $state['date_start'] ?? '',
+					'date_end'         => $state['date_end'] ?? '',
 				] );
 			}
 		);
@@ -272,7 +288,9 @@ class Ajax {
 			$min_attendees,
 			$max_attendees,
 			! empty( $_POST['with_venues'] ),
-			! empty( $_POST['with_organizers'] )
+			! empty( $_POST['with_organizers'] ),
+			$this->post_date( 'date_start' ),
+			$this->post_date( 'date_end' )
 		);
 
 		if ( ! $result['success'] ) {
@@ -512,6 +530,10 @@ class Ajax {
 			'total'    => $state['total'],
 			'finished' => $state['done'] >= $state['total'],
 		] );
+	}
+
+	private function post_date( string $key ): string {
+		return isset( $_POST[ $key ] ) ? sanitize_text_field( wp_unslash( $_POST[ $key ] ) ) : '';
 	}
 
 	private function verify_request(): void {
