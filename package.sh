@@ -21,6 +21,7 @@ zip -r "$OUTPUT_FILE" "$PLUGIN_NAME" \
   -x "$PLUGIN_NAME/package.sh" \
   -x "$PLUGIN_NAME/*.md" \
   -x "$PLUGIN_NAME/openspec/*" \
+  -x "$PLUGIN_NAME/*.zip" \
   > /dev/null
 
 echo "✓ Created: $OUTPUT_FILE"
