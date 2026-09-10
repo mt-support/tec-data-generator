@@ -78,6 +78,36 @@ add it to the main plugin's Composer/npm setup as out of scope unless the user e
   (`generate`, `generate-events`, `generate-tickets`'s new-container path, `generate-series`, `scenario`,
   and `Scenario_Job::process_chunk()`) must thread `date_start`/`date_end` through to `generate_batch()`/
   `generate_series()` — don't add a new container-creating path that bypasses `normalize_date_range()`.
+- **Never let a WP-CLI docblock `---`/`default:` block hold prose.** WP-CLI's synopsis parser treats
+  those YAML blocks as *real* values it injects into `$assoc_args`, not documentation. `default: +2 weeks
+  from --start-date` on `--end-date` therefore made every event-creating command fatal in
+  `normalize_date_range()` (`DateTimeImmutable` can't parse it), and `default: random (20-200)` on
+  `--capacity` made `parse_ticket_options()`'s `isset()` fire and cast to capacity `0`, i.e. every
+  `add-rsvp`/`add-tickets` ticket sold out on creation (both fixed 2026-09-10). If the real default is
+  computed in PHP, describe it in the `:` line and leave the `---` block out entirely — only literal,
+  parseable values belong there.
+- **RSVP creation calls `ticket_add()` exactly once, inside `with_v1_rsvp_repositories()`.** A second,
+  unwrapped `ticket_add()` "so the V2 admin can see it" was added and removed again (2026-09-10): on a
+  V1 site it created a duplicate empty ticket beside the real one, and on a V2 site it created a
+  `tec_tc_ticket` that *shadowed* the V1 ticket in `Tribe__Tickets__Tickets::get_all_event_tickets()`
+  while holding zero attendees — the "generated events have no attendees" report. V1 data being
+  invisible on a migrated site is expected, not a bug to paper over; `Plugin_Availability::has_rsvp_v2()`
+  warns about it in the CLI and on the admin page instead. Don't reintroduce a V2 write path here.
+- **Anything that writes attendees with raw `wp_insert_post()` must call
+  `Generator::clear_attendee_cache()` afterwards.** `Tribe__Tickets__Tickets::get_event_attendees()`
+  caches per post in a `Tribe__Post_Transient` for an hour (2 minutes on admin screens), and
+  `ticket_add()` warms that cache earlier in the same run — while the ticket still has zero attendees.
+  Nothing invalidates it, because the attendee writer deliberately bypasses the ET API, so the
+  Attendees screen reported 0 for a fresh run (observed on 3 of 6 series events, 2026-09-10).
+- **Featured images come from a shared per-run pool (`Generator::pick_image()`), never one attachment
+  per post.** Building an attachment per post — picsum round trip plus
+  `wp_generate_attachment_metadata()` resizing — was ~70% of a run's wall clock (10.9s vs 3.3s for 6
+  units) and the main reason large runs crawled; it also ran for tickets, which have no use for a
+  thumbnail. `IMAGE_POOL_SIZE` images are created once per run (recovered across chunks via
+  `find_run_posts( 'attachment' )`, same as the venue/organizer pools) and shared by
+  `set_post_thumbnail()`. Pool attachments have no `post_parent`, so `Cleanup` removes them by their
+  own `GENERATED_META_KEY` tag rather than by cascade. `FEATURED_IMAGE_KINDS` is the whitelist of post
+  kinds that get one — don't add tickets/attendees back to it.
 - **Every post/ticket/attendee created must be tagged** with `TEC\DataGenerator\Data::GENERATED_META_KEY` (and a
   run ID). `Cleanup` relies entirely on this meta to decide what it's allowed to delete — never add a deletion
   path that queries by anything else (e.g. post title prefix, date range), since that risks deleting real site

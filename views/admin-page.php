@@ -21,6 +21,13 @@ if ( ! defined( 'ABSPATH' ) ) {
 		<code>wp tec-data-generator generate --count=5000</code> &mdash;
 		<?php esc_html_e( 'the admin UI below is chunked but slower and tab-bound.', 'tec-data-generator' ); ?>
 	</p>
+	<?php if ( \TEC\DataGenerator\Plugin_Availability::has_rsvp_v2() ) : ?>
+	<div class="notice notice-warning inline">
+		<p>
+			<?php esc_html_e( 'This site is running RSVP V2 (the rsvp-to-tc migration has completed). This tool always generates legacy V1 RSVP tickets and attendees, and Event Tickets reads whichever RSVP repository is currently bound — so generated tickets/attendees will NOT show up in the Tickets or Attendees screens until you revert the migration below. The counts in "Currently generated" below are accurate; they read the V1 post types directly.', 'tec-data-generator' ); ?>
+		</p>
+	</div>
+	<?php endif; ?>
 	<?php if ( ! empty( $missing_ticket_types ) ) : ?>
 	<div class="notice notice-warning inline">
 		<p>

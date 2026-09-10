@@ -53,6 +53,27 @@ class Plugin_Availability {
 		return class_exists( 'Tribe__Tickets__Plus__Main' );
 	}
 
+	/**
+	 * True when the site's RSVP feature is already running in V2 (Tickets Commerce-backed) mode,
+	 * i.e. the `rsvp-to-tc` migration has completed.
+	 *
+	 * This tool always writes the legacy V1 shape (see Generator::with_v1_rsvp_repositories()),
+	 * and Event Tickets' admin reads whichever repository is bound — so on a V2 site the data it
+	 * generates is real and migratable but invisible in the Tickets/Attendees UI until the site is
+	 * reverted. Callers use this to warn instead of leaving QA staring at an empty attendee list.
+	 */
+	public static function has_rsvp_v2(): bool {
+		if ( ! function_exists( 'tribe' ) || ! class_exists( '\\Tribe__Tickets__Repositories__Ticket__RSVP' ) ) {
+			return false;
+		}
+
+		try {
+			return ! ( tribe( 'tickets.ticket-repository.rsvp' ) instanceof \Tribe__Tickets__Repositories__Ticket__RSVP );
+		} catch ( \Exception $e ) {
+			return false;
+		}
+	}
+
 	public static function has_events_pro_or_ecp(): bool {
 		return self::has_events_pro() || self::has_ecp();
 	}
