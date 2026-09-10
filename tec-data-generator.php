@@ -2,7 +2,7 @@
 /**
  * Plugin Name: TEC Data Generator
  * Description: Generates bulk test data (Events, Pages, Posts, Venues, Organizers, tickets, attendees) for stress-testing Event Tickets.
- * Version: 1.1.0
+ * Version: 1.2.0
  * Author: Victor Larodiel
  * Requires Plugins: event-tickets, the-events-calendar
  * Requires PHP: 7.4
@@ -13,7 +13,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 define( 'TEC_DATA_GENERATOR_FILE', __FILE__ );
-define( 'TEC_DATA_GENERATOR_VERSION', '1.1.0' );
+define( 'TEC_DATA_GENERATOR_VERSION', '1.2.0' );
 
 require_once __DIR__ . '/includes/class-data.php';
 require_once __DIR__ . '/includes/class-plugin-availability.php';

@@ -59,16 +59,10 @@ class CLI {
 	 * ---
 	 *
 	 * [--start-date=<date>]
-	 * : Earliest date/time (any strtotime()-parsable value) generated events can fall on.
-	 * ---
-	 * default: now
-	 * ---
+	 * : Earliest date/time (any strtotime()-parsable value) generated events can fall on. Defaults to now.
 	 *
 	 * [--end-date=<date>]
-	 * : Latest date/time generated events can fall on.
-	 * ---
-	 * default: +2 weeks from --start-date
-	 * ---
+	 * : Latest date/time generated events can fall on. Defaults to two weeks after the start date.
 	 *
 	 * ## EXAMPLES
 	 *
@@ -100,6 +94,8 @@ class CLI {
 			'date_start'      => $assoc_args['start-date'] ?? '',
 			'date_end'        => $assoc_args['end-date'] ?? '',
 		];
+
+		$this->warn_if_rsvp_v2();
 
 		\WP_CLI::log( "Starting generation of {$count} units (run: {$run_id})..." );
 
@@ -155,16 +151,10 @@ class CLI {
 	 * : Attach a random generated Organizer to each Event container.
 	 *
 	 * [--start-date=<date>]
-	 * : Earliest date/time (any strtotime()-parsable value) generated events can fall on.
-	 * ---
-	 * default: now
-	 * ---
+	 * : Earliest date/time (any strtotime()-parsable value) generated events can fall on. Defaults to now.
 	 *
 	 * [--end-date=<date>]
-	 * : Latest date/time generated events can fall on.
-	 * ---
-	 * default: +2 weeks from --start-date
-	 * ---
+	 * : Latest date/time generated events can fall on. Defaults to two weeks after the start date.
 	 *
 	 * ## EXAMPLES
 	 *
@@ -286,16 +276,10 @@ class CLI {
 	 * ---
 	 *
 	 * [--start-date=<date>]
-	 * : Earliest date/time (any strtotime()-parsable value) new event containers can fall on. Ignored with --event-id.
-	 * ---
-	 * default: now
-	 * ---
+	 * : Earliest date/time (any strtotime()-parsable value) new event containers can fall on. Ignored with --event-id. Defaults to now.
 	 *
 	 * [--end-date=<date>]
-	 * : Latest date/time new event containers can fall on. Ignored with --event-id.
-	 * ---
-	 * default: +2 weeks from --start-date
-	 * ---
+	 * : Latest date/time new event containers can fall on. Ignored with --event-id. Defaults to two weeks after the start date.
 	 *
 	 * ## EXAMPLES
 	 *
@@ -314,6 +298,10 @@ class CLI {
 		$ticket_type   = $assoc_args['ticket-type'] ?? 'rsvp';
 		$run_id        = Data::new_run_id();
 		$generator     = new Generator( $run_id );
+
+		if ( 'paid' !== $ticket_type ) {
+			$this->warn_if_rsvp_v2();
+		}
 
 		$event_id = (int) ( $assoc_args['event-id'] ?? 0 );
 
@@ -421,16 +409,10 @@ class CLI {
 	 * ---
 	 *
 	 * [--start-date=<date>]
-	 * : Earliest date/time (any strtotime()-parsable value) generated events can fall on.
-	 * ---
-	 * default: now
-	 * ---
+	 * : Earliest date/time (any strtotime()-parsable value) generated events can fall on. Defaults to now.
 	 *
 	 * [--end-date=<date>]
-	 * : Latest date/time generated events can fall on.
-	 * ---
-	 * default: +2 weeks from --start-date
-	 * ---
+	 * : Latest date/time generated events can fall on. Defaults to two weeks after the start date.
 	 *
 	 * ## EXAMPLES
 	 *
@@ -463,6 +445,8 @@ class CLI {
 			'date_start'       => $assoc_args['start-date'] ?? '',
 			'date_end'         => $assoc_args['end-date'] ?? '',
 		];
+
+		$this->warn_if_rsvp_v2();
 
 		\WP_CLI::log( "Starting series generation of {$count} series with {$events_per_series} events each (run: {$run_id})..." );
 
@@ -529,16 +513,10 @@ class CLI {
 	 * : Attach a random generated Organizer to each Event unit.
 	 *
 	 * [--start-date=<date>]
-	 * : Earliest date/time (any strtotime()-parsable value) generated events can fall on.
-	 * ---
-	 * default: now
-	 * ---
+	 * : Earliest date/time (any strtotime()-parsable value) generated events can fall on. Defaults to now.
 	 *
 	 * [--end-date=<date>]
-	 * : Latest date/time generated events can fall on.
-	 * ---
-	 * default: +2 weeks from --start-date
-	 * ---
+	 * : Latest date/time generated events can fall on. Defaults to two weeks after the start date.
 	 *
 	 * ## EXAMPLES
 	 *
@@ -564,6 +542,8 @@ class CLI {
 		$min_attendees = max( 1, (int) ( $assoc_args['min-attendees'] ?? 1 ) );
 		$max_attendees = max( $min_attendees, (int) ( $assoc_args['max-attendees'] ?? 20 ) );
 		$batch_size    = max( 1, (int) ( $assoc_args['batch-size'] ?? 100 ) );
+
+		$this->warn_if_rsvp_v2();
 
 		\WP_CLI::log( "Scenario: {$type}" );
 		\WP_CLI::log( "  units (Event/Page/Post):  {$preset['units_min']}-{$preset['units_max']} -> {$unit_count}" );
@@ -633,10 +613,7 @@ class CLI {
 	 * ---
 	 *
 	 * [--capacity=<number>]
-	 * : Capacity per ticket.
-	 * ---
-	 * default: random (20-200)
-	 * ---
+	 * : Capacity per ticket. Defaults to a random value between 20 and 200.
 	 *
 	 * [--stock=<number>]
 	 * : Stock per ticket. Defaults to the same value as capacity.
@@ -663,6 +640,8 @@ class CLI {
 		$quantity = max( 1, (int) ( $assoc_args['quantity'] ?? 1 ) );
 		$options  = $this->parse_ticket_options( $assoc_args );
 
+		$this->warn_if_rsvp_v2();
+
 		$run_id     = Data::new_run_id();
 		$generator  = new Generator( $run_id );
 		$ticket_ids = $generator->add_rsvp_tickets( $event_id, $quantity, $options );
@@ -687,10 +666,7 @@ class CLI {
 	 * ---
 	 *
 	 * [--capacity=<number>]
-	 * : Capacity per ticket.
-	 * ---
-	 * default: random (20-200)
-	 * ---
+	 * : Capacity per ticket. Defaults to a random value between 20 and 200.
 	 *
 	 * [--stock=<number>]
 	 * : Stock per ticket. Defaults to the same value as capacity.
@@ -812,6 +788,25 @@ class CLI {
 		}
 
 		return $options;
+	}
+
+	/**
+	 * Warns when the site has already completed the rsvp-to-tc migration. Everything this tool
+	 * writes is legacy V1 shape by design, but Event Tickets' admin reads whichever RSVP
+	 * repository is currently bound — so on a V2 site the generated tickets/attendees are real
+	 * and migratable, yet show up nowhere in the Tickets/Attendees UI. Say so up front rather
+	 * than letting QA conclude the generator produced nothing.
+	 */
+	private function warn_if_rsvp_v2(): void {
+		if ( ! Plugin_Availability::has_rsvp_v2() ) {
+			return;
+		}
+
+		\WP_CLI::warning(
+			'This site is running RSVP V2 (the rsvp-to-tc migration has completed). Generated V1 '
+			. 'RSVP tickets/attendees will NOT appear in the Tickets or Attendees admin screens until '
+			. 'you run `wp tec-data-generator revert`. The data itself is created correctly.'
+		);
 	}
 
 	/**
