@@ -8,6 +8,8 @@
 
 namespace TEC\DataGenerator;
 
+use TEC\Tickets\RSVP\V2\Repositories\Ticket_Repository as Rsvp_V2_Ticket_Repository;
+
 class Plugin_Availability {
 
 	const ALLOWED_EVENT_TYPES  = [ 'single', 'recurring', 'virtual' ];
@@ -54,23 +56,41 @@ class Plugin_Availability {
 	}
 
 	/**
-	 * True when the site's RSVP feature is already running in V2 (Tickets Commerce-backed) mode,
-	 * i.e. the `rsvp-to-tc` migration has completed.
+	 * True when the site's RSVP feature runs in V2 (Tickets Commerce-backed) mode, i.e. the
+	 * `rsvp-to-tc` migration has completed. The Generator then writes V2 RSVP tickets/attendees,
+	 * since Event Tickets only displays the RSVP shape whose repository it has bound.
 	 *
-	 * This tool always writes the legacy V1 shape (see Generator::with_v1_rsvp_repositories()),
-	 * and Event Tickets' admin reads whichever repository is bound — so on a V2 site the data it
-	 * generates is real and migratable but invisible in the Tickets/Attendees UI until the site is
-	 * reverted. Callers use this to warn instead of leaving QA staring at an empty attendee list.
+	 * Checked against the V2 repository class itself: a site with RSVPs disabled binds a
+	 * null-object repository that is neither V1 nor V2.
 	 */
 	public static function has_rsvp_v2(): bool {
-		if ( ! function_exists( 'tribe' ) || ! class_exists( '\\Tribe__Tickets__Repositories__Ticket__RSVP' ) ) {
+		if ( ! function_exists( 'tribe' ) || ! class_exists( Rsvp_V2_Ticket_Repository::class ) ) {
 			return false;
 		}
 
 		try {
-			return ! ( tribe( 'tickets.ticket-repository.rsvp' ) instanceof \Tribe__Tickets__Repositories__Ticket__RSVP );
+			return tribe( 'tickets.ticket-repository.rsvp' ) instanceof Rsvp_V2_Ticket_Repository;
 		} catch ( \Exception $e ) {
 			return false;
+		}
+	}
+
+	/**
+	 * The editor generated content defaults to when none is requested: whichever one The Events
+	 * Calendar opens events in. Classic content opened in the block editor gets TEC's "classic"
+	 * block template, whose Venue block has no venue set, so the linked venue looks missing.
+	 *
+	 * @return string 'block' or 'classic'.
+	 */
+	public static function default_editor(): string {
+		if ( ! function_exists( 'tribe' ) ) {
+			return 'classic';
+		}
+
+		try {
+			return tribe( 'editor' )->should_load_blocks() ? 'block' : 'classic';
+		} catch ( \Exception $e ) {
+			return 'classic';
 		}
 	}
 

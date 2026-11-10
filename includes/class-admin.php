@@ -107,6 +107,7 @@ class Admin {
 		];
 
 		$plugin_statuses = Plugin_Availability::get_statuses();
+		$default_editor  = Plugin_Availability::default_editor();
 
 		// The block editor gates ticket blocks on the stored option directly (it never
 		// sees this plugin's runtime tribe_tickets_post_types filter), so warn when

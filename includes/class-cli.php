@@ -1,6 +1,6 @@
 <?php
 /**
- * `wp tec-data-generator` command: bulk-generate or clean up legacy V1 TEC Data-test data.
+ * `wp tec-data-generator` command: bulk-generate or clean up TEC test data.
  */
 
 namespace TEC\DataGenerator;
@@ -8,7 +8,7 @@ namespace TEC\DataGenerator;
 class CLI {
 
 	/**
-	 * Generates bulk legacy V1 RSVP test data (events/pages/posts + RSVP tickets + attendees).
+	 * Generates bulk RSVP test data (events/pages/posts + RSVP tickets + attendees), in the site's active RSVP version (V1 or V2).
 	 *
 	 * ## OPTIONS
 	 *
@@ -95,7 +95,7 @@ class CLI {
 			'date_end'        => $assoc_args['end-date'] ?? '',
 		];
 
-		$this->warn_if_rsvp_v2();
+		$this->log_rsvp_version();
 
 		\WP_CLI::log( "Starting generation of {$count} units (run: {$run_id})..." );
 
@@ -124,9 +124,8 @@ class CLI {
 	 * ---
 	 *
 	 * [--editor=<editor>]
-	 * : Container editor: classic (plain post_content) or block (Gutenberg markup).
+	 * : Container editor: classic (plain post_content) or block (Gutenberg markup). Defaults to the editor events open in on this site.
 	 * ---
-	 * default: classic
 	 * options:
 	 *   - classic
 	 *   - block
@@ -176,7 +175,7 @@ class CLI {
 		$options   = [
 			'ticket_type'     => 'none',
 			'container'       => $assoc_args['container'] ?? 'event',
-			'editor'          => $assoc_args['editor'] ?? 'classic',
+			'editor'          => $assoc_args['editor'] ?? '',
 			'with_venues'     => isset( $assoc_args['with-venues'] ),
 			'with_organizers' => isset( $assoc_args['with-organizers'] ),
 			'event_types'     => isset( $assoc_args['event-types'] ) ? explode( ',', (string) $assoc_args['event-types'] ) : [ 'single' ],
@@ -225,9 +224,8 @@ class CLI {
 	 * ---
 	 *
 	 * [--editor=<editor>]
-	 * : Container editor for newly created containers: classic or block. Ignored with --event-id.
+	 * : Container editor for newly created containers: classic or block. Ignored with --event-id. Defaults to the editor events open in on this site.
 	 * ---
-	 * default: classic
 	 * options:
 	 *   - classic
 	 *   - block
@@ -275,6 +273,12 @@ class CLI {
 	 * default: single
 	 * ---
 	 *
+	 * [--with-venues]
+	 * : Attach a random generated Venue to each new Event container. Ignored with --event-id.
+	 *
+	 * [--with-organizers]
+	 * : Attach a random generated Organizer to each new Event container. Ignored with --event-id.
+	 *
 	 * [--start-date=<date>]
 	 * : Earliest date/time (any strtotime()-parsable value) new event containers can fall on. Ignored with --event-id. Defaults to now.
 	 *
@@ -284,6 +288,7 @@ class CLI {
 	 * ## EXAMPLES
 	 *
 	 *     wp tec-data-generator generate-tickets --count=10 --container=event --editor=block
+ *     wp tec-data-generator generate-tickets --count=10 --with-venues --with-organizers
 	 *     wp tec-data-generator generate-tickets --count=5 --container=page --ticket-type=rsvp
 	 *     wp tec-data-generator generate-tickets --event-id=123 --quantity=5 --ticket-type=rsvp
 	 *
@@ -300,7 +305,7 @@ class CLI {
 		$generator     = new Generator( $run_id );
 
 		if ( 'paid' !== $ticket_type ) {
-			$this->warn_if_rsvp_v2();
+			$this->log_rsvp_version();
 		}
 
 		$event_id = (int) ( $assoc_args['event-id'] ?? 0 );
@@ -344,7 +349,9 @@ class CLI {
 			'max_rsvps_per_unit' => $max_tickets,
 			'ticket_type'        => $ticket_type,
 			'container'          => $assoc_args['container'] ?? 'event',
-			'editor'             => $assoc_args['editor'] ?? 'classic',
+			'editor'             => $assoc_args['editor'] ?? '',
+			'with_venues'        => isset( $assoc_args['with-venues'] ),
+			'with_organizers'    => isset( $assoc_args['with-organizers'] ),
 			'event_types'        => isset( $assoc_args['event-types'] ) ? explode( ',', (string) $assoc_args['event-types'] ) : [ 'single' ],
 			'date_start'         => $assoc_args['start-date'] ?? '',
 			'date_end'           => $assoc_args['end-date'] ?? '',
@@ -441,12 +448,11 @@ class CLI {
 			'with_venues'      => isset( $assoc_args['with-venues'] ),
 			'with_organizers'  => isset( $assoc_args['with-organizers'] ),
 			'ticket_type'      => $ticket_type,
-			'editor'           => 'classic',
 			'date_start'       => $assoc_args['start-date'] ?? '',
 			'date_end'         => $assoc_args['end-date'] ?? '',
 		];
 
-		$this->warn_if_rsvp_v2();
+		$this->log_rsvp_version();
 
 		\WP_CLI::log( "Starting series generation of {$count} series with {$events_per_series} events each (run: {$run_id})..." );
 
@@ -543,7 +549,7 @@ class CLI {
 		$max_attendees = max( $min_attendees, (int) ( $assoc_args['max-attendees'] ?? 20 ) );
 		$batch_size    = max( 1, (int) ( $assoc_args['batch-size'] ?? 100 ) );
 
-		$this->warn_if_rsvp_v2();
+		$this->log_rsvp_version();
 
 		\WP_CLI::log( "Scenario: {$type}" );
 		\WP_CLI::log( "  units (Event/Page/Post):  {$preset['units_min']}-{$preset['units_max']} -> {$unit_count}" );
@@ -640,7 +646,7 @@ class CLI {
 		$quantity = max( 1, (int) ( $assoc_args['quantity'] ?? 1 ) );
 		$options  = $this->parse_ticket_options( $assoc_args );
 
-		$this->warn_if_rsvp_v2();
+		$this->log_rsvp_version();
 
 		$run_id     = Data::new_run_id();
 		$generator  = new Generator( $run_id );
@@ -651,8 +657,7 @@ class CLI {
 
 	/**
 	 * Adds paid tickets (via whatever provider the event already uses — Tickets Commerce, PayPal, etc.)
-	 * to an event that already exists on the site. This is the one command in this plugin that creates
-	 * non-RSVP tickets, by design — see CLAUDE.md's "Legacy V1 shape only" hard constraint.
+	 * to an event that already exists on the site.
 	 *
 	 * ## OPTIONS
 	 *
@@ -791,22 +796,18 @@ class CLI {
 	}
 
 	/**
-	 * Warns when the site has already completed the rsvp-to-tc migration. Everything this tool
-	 * writes is legacy V1 shape by design, but Event Tickets' admin reads whichever RSVP
-	 * repository is currently bound — so on a V2 site the generated tickets/attendees are real
-	 * and migratable, yet show up nowhere in the Tickets/Attendees UI. Say so up front rather
-	 * than letting QA conclude the generator produced nothing.
+	 * Logs which RSVP shape this run writes. It follows the site's active RSVP version, so on a
+	 * site that has completed the rsvp-to-tc migration the data is V2 and has nothing left to
+	 * migrate — QA testing the migration needs to `revert` first.
 	 */
-	private function warn_if_rsvp_v2(): void {
-		if ( ! Plugin_Availability::has_rsvp_v2() ) {
+	private function log_rsvp_version(): void {
+		if ( Plugin_Availability::has_rsvp_v2() ) {
+			\WP_CLI::log( 'RSVP V2 is active: generating Tickets Commerce RSVP tickets/attendees. Run `wp tec-data-generator revert` first to generate V1 data for migration testing.' );
+
 			return;
 		}
 
-		\WP_CLI::warning(
-			'This site is running RSVP V2 (the rsvp-to-tc migration has completed). Generated V1 '
-			. 'RSVP tickets/attendees will NOT appear in the Tickets or Attendees admin screens until '
-			. 'you run `wp tec-data-generator revert`. The data itself is created correctly.'
-		);
+		\WP_CLI::log( 'RSVP V1 is active: generating legacy V1 RSVP tickets/attendees.' );
 	}
 
 	/**

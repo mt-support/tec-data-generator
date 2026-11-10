@@ -20,7 +20,7 @@ wp tec-data-generator generate-tickets --event-id=123 --quantity=5 --ticket-type
 ```
 
 Flags: `generate-events --count` (100), `--container` (event|page),
-`--editor` (classic|block), `--event-types`, `--batch-size` (100).
+`--editor` (classic|block; defaults to the editor events open in), `--with-venues`/`--with-organizers`, `--event-types`, `--batch-size` (100).
 `generate-tickets` adds `--min-tickets`/`--max-tickets` (1/1),
 `--min-attendees`/`--max-attendees` (1/20), `--ticket-type` (rsvp|paid).
 

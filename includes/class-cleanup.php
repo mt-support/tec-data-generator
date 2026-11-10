@@ -9,11 +9,41 @@ namespace TEC\DataGenerator;
 class Cleanup {
 
 	/**
-	 * Post types deleted by cleanup, in deletion order (children before parents).
+	 * Post types deleted by cleanup, in deletion order (children before parents). The Tickets
+	 * Commerce types cover V2 RSVPs and paid tickets alike: attendees, then the orders that
+	 * wrap them, then tickets.
 	 *
 	 * @var string[]
 	 */
-	const POST_TYPES_IN_DELETE_ORDER = [ 'tribe_rsvp_attendees', 'tribe_rsvp_tickets', 'tribe_events', 'page', 'post', 'tribe_venue', 'tribe_organizer' ];
+	const POST_TYPES_IN_DELETE_ORDER = [
+		'tribe_rsvp_attendees',
+		'tec_tc_attendee',
+		'tec_tc_order',
+		'tribe_rsvp_tickets',
+		'tec_tc_ticket',
+		'tribe_events',
+		'page',
+		'post',
+		'tribe_venue',
+		'tribe_organizer',
+	];
+
+	/**
+	 * Admin stats labels, keyed by the post kind Generator::tag_generated() records.
+	 *
+	 * @var array<string,string>
+	 */
+	const COUNTED_KINDS = [
+		'event'          => 'event',
+		'page'           => 'page',
+		'post'           => 'post',
+		'series'         => 'series',
+		'ticket'         => 'ticket',
+		'attendee'       => 'attendee',
+		'venue'          => 'venue',
+		'organizer'      => 'organizer',
+		'featured_image' => 'image',
+	];
 
 	/**
 	 * Deletes up to $limit generated records this call, processing post types in
@@ -134,27 +164,18 @@ class Cleanup {
 	}
 
 	/**
-	 * Counts of generated records by human-readable kind, for the admin stats block.
+	 * Counts of generated records by human-readable kind, for the admin stats block. Counted by
+	 * the recorded kind rather than post type, so RSVP tickets/attendees are counted whether
+	 * they're V1 posts or V2 Tickets Commerce posts (and still after the migration converts them).
 	 *
 	 * @return array<string,int>
 	 */
 	public function count_by_type( ?string $run_id = null ): array {
-		$labels = [
-			'tribe_events'         => 'event',
-			'page'                 => 'page',
-			'post'                 => 'post',
-			'tribe_event_series'   => 'series',
-			'tribe_rsvp_tickets'   => 'ticket',
-			'tribe_rsvp_attendees' => 'attendee',
-			'tribe_venue'          => 'venue',
-			'tribe_organizer'      => 'organizer',
-			'attachment'           => 'image',
-		];
+		$post_types = array_values( get_post_types( [], 'names' ) );
+		$out        = [];
 
-		$out = [];
-
-		foreach ( $labels as $post_type => $label ) {
-			$out[ $label ] = $this->count_type( $post_type, $run_id );
+		foreach ( self::COUNTED_KINDS as $kind => $label ) {
+			$out[ $label ] = $this->count_type( $post_types, $run_id, $kind );
 		}
 
 		return $out;
@@ -184,14 +205,24 @@ class Cleanup {
 
 	/**
 	 * @param string|string[] $post_type
+	 * @param string|null     $kind      Only count posts tagged with this post kind.
 	 */
-	private function count_type( $post_type, ?string $run_id ): int {
+	private function count_type( $post_type, ?string $run_id, ?string $kind = null ): int {
+		$meta_query = $this->meta_query( $run_id );
+
+		if ( $kind ) {
+			$meta_query[] = [
+				'key'   => Data::POST_KIND_META_KEY,
+				'value' => $kind,
+			];
+		}
+
 		$query = new \WP_Query( [
 			'post_type'        => $post_type,
 			'post_status'      => 'any',
 			'posts_per_page'   => 1,
 			'fields'           => 'ids',
-			'meta_query'       => $this->meta_query( $run_id ),
+			'meta_query'       => $meta_query,
 			'suppress_filters' => true,
 			// Same as query_ids(): count real rows, not provisional occurrence IDs.
 			'tec_events_ignore' => true,
