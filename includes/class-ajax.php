@@ -105,7 +105,7 @@ class Ajax {
 			function ( $run_id ) use ( $total ) {
 				$raw_event_types = isset( $_POST['event_types'] ) ? sanitize_text_field( wp_unslash( $_POST['event_types'] ) ) : 'single';
 				$container       = isset( $_POST['container'] ) ? sanitize_text_field( wp_unslash( $_POST['container'] ) ) : 'event';
-				$editor          = isset( $_POST['editor'] ) ? sanitize_text_field( wp_unslash( $_POST['editor'] ) ) : 'classic';
+				$editor          = isset( $_POST['editor'] ) ? sanitize_text_field( wp_unslash( $_POST['editor'] ) ) : '';
 
 				return [
 					'total'           => $total,
@@ -114,7 +114,7 @@ class Ajax {
 					'with_organizers' => ! empty( $_POST['with_organizers'] ),
 					'event_types'     => $raw_event_types,
 					'container'       => 'event',
-					'editor'          => in_array( $editor, [ 'classic', 'block' ], true ) ? $editor : 'classic',
+					'editor'          => in_array( $editor, [ 'classic', 'block' ], true ) ? $editor : '',
 					'date_start'      => $this->post_date( 'date_start' ),
 					'date_end'        => $this->post_date( 'date_end' ),
 				];
@@ -126,7 +126,7 @@ class Ajax {
 					'with_organizers' => $state['with_organizers'] ?? false,
 					'event_types'     => $state['event_types'] ?? 'single',
 					'container'       => $state['container'] ?? 'event',
-					'editor'          => $state['editor'] ?? 'classic',
+					'editor'          => $state['editor'] ?? '',
 					'date_start'      => $state['date_start'] ?? '',
 					'date_end'        => $state['date_end'] ?? '',
 				] );
@@ -191,7 +191,7 @@ class Ajax {
 			function ( $run_id ) use ( $total ) {
 				$raw_event_types = isset( $_POST['event_types'] ) ? sanitize_text_field( wp_unslash( $_POST['event_types'] ) ) : 'single';
 				$container       = isset( $_POST['container'] ) ? sanitize_text_field( wp_unslash( $_POST['container'] ) ) : 'event';
-				$editor          = isset( $_POST['editor'] ) ? sanitize_text_field( wp_unslash( $_POST['editor'] ) ) : 'classic';
+				$editor          = isset( $_POST['editor'] ) ? sanitize_text_field( wp_unslash( $_POST['editor'] ) ) : '';
 				$ticket_type     = isset( $_POST['ticket_type'] ) ? sanitize_text_field( wp_unslash( $_POST['ticket_type'] ) ) : 'rsvp';
 				$min_tickets     = max( 1, (int) ( $_POST['min_tickets'] ?? 1 ) );
 				$max_tickets     = max( $min_tickets, (int) ( $_POST['max_tickets'] ?? 1 ) );
@@ -207,8 +207,10 @@ class Ajax {
 					'max_tickets'     => $max_tickets,
 					'event_types'     => $raw_event_types,
 					'container'       => in_array( $container, [ 'event', 'page' ], true ) ? $container : 'event',
-					'editor'          => in_array( $editor, [ 'classic', 'block' ], true ) ? $editor : 'classic',
+					'editor'          => in_array( $editor, [ 'classic', 'block' ], true ) ? $editor : '',
 					'ticket_type'     => in_array( $ticket_type, [ 'rsvp', 'paid' ], true ) ? $ticket_type : 'rsvp',
+					'with_venues'     => ! empty( $_POST['with_venues'] ),
+					'with_organizers' => ! empty( $_POST['with_organizers'] ),
 					'date_start'      => $this->post_date( 'date_start' ),
 					'date_end'        => $this->post_date( 'date_end' ),
 				];
@@ -221,8 +223,10 @@ class Ajax {
 					'max_rsvps_per_unit' => $state['max_tickets'],
 					'event_types'        => $state['event_types'] ?? 'single',
 					'container'          => $state['container'] ?? 'event',
-					'editor'             => $state['editor'] ?? 'classic',
+					'editor'             => $state['editor'] ?? '',
 					'ticket_type'        => $state['ticket_type'] ?? 'rsvp',
+					'with_venues'        => $state['with_venues'] ?? false,
+					'with_organizers'    => $state['with_organizers'] ?? false,
 					'date_start'         => $state['date_start'] ?? '',
 					'date_end'           => $state['date_end'] ?? '',
 				] );

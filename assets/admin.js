@@ -499,7 +499,7 @@
 			var containerEl = document.querySelector( 'input[name="tec-data-generator-events-container"]:checked' );
 			var container = containerEl ? containerEl.value : 'event';
 			var editorEl = document.querySelector( 'input[name="tec-data-generator-events-editor"]:checked' );
-			var editor = editorEl ? editorEl.value : 'classic';
+			var editor = editorEl ? editorEl.value : '';
 			var withVenues = document.getElementById( 'tec-data-generator-events-with-venues' );
 			var withOrganizers = document.getElementById( 'tec-data-generator-events-with-organizers' );
 			var eventTypes = Array.prototype.map.call(
@@ -550,7 +550,7 @@
 			var ticketTypeEl = document.querySelector( 'input[name="tec-data-generator-tickets-ticket-type"]:checked:not(:disabled)' );
 			var ticketType = ticketTypeEl ? ticketTypeEl.value : 'rsvp';
 			var editorEl = document.querySelector( 'input[name="tec-data-generator-tickets-editor"]:checked' );
-			var editor = editorEl ? editorEl.value : 'classic';
+			var editor = editorEl ? editorEl.value : '';
 			var eventTypes = Array.prototype.map.call(
 				document.querySelectorAll( '.tec-data-generator-tickets-event-type:checked:not(:disabled)' ),
 				function ( el ) { return el.value; }
@@ -571,7 +571,23 @@
 				var maxAtt = parseInt( document.getElementById( 'tec-data-generator-tickets-max-attendees' ).value, 10 ) || 20;
 				var dateStart = document.getElementById( 'tec-data-generator-tickets-start-date' ).value;
 				var dateEnd = document.getElementById( 'tec-data-generator-tickets-end-date' ).value;
-				params = { total: total, container: container, editor: editor, ticket_type: ticketType, min_tickets: minT, max_tickets: maxT, min_attendees: minAtt, max_attendees: maxAtt, event_types: eventTypes.join( ',' ), date_start: dateStart, date_end: dateEnd };
+				var ticketsWithVenues = document.getElementById( 'tec-data-generator-tickets-with-venues' );
+				var ticketsWithOrganizers = document.getElementById( 'tec-data-generator-tickets-with-organizers' );
+				params = {
+					total: total,
+					container: container,
+					editor: editor,
+					ticket_type: ticketType,
+					min_tickets: minT,
+					max_tickets: maxT,
+					min_attendees: minAtt,
+					max_attendees: maxAtt,
+					event_types: eventTypes.join( ',' ),
+					date_start: dateStart,
+					date_end: dateEnd,
+					with_venues: ticketsWithVenues && ticketsWithVenues.checked ? 1 : 0,
+					with_organizers: ticketsWithOrganizers && ticketsWithOrganizers.checked ? 1 : 0,
+				};
 			}
 
 			ticketsBtn.disabled = true;

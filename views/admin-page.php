@@ -7,6 +7,7 @@
  * @var array<string,bool>      $plugin_availability Which optional dependency plugins are active.
  * @var array<int,array{name:string,status:string,status_label:string,version:string}> $plugin_statuses Name, status, and version of each related plugin.
  * @var string[]                $missing_ticket_types Page/Post types missing from the stored ticket-enabled list.
+ * @var string                  $default_editor 'block' or 'classic': the editor events open in on this site.
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -22,9 +23,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 		<?php esc_html_e( 'the admin UI below is chunked but slower and tab-bound.', 'tec-data-generator' ); ?>
 	</p>
 	<?php if ( \TEC\DataGenerator\Plugin_Availability::has_rsvp_v2() ) : ?>
-	<div class="notice notice-warning inline">
+	<div class="notice notice-info inline">
 		<p>
-			<?php esc_html_e( 'This site is running RSVP V2 (the rsvp-to-tc migration has completed). This tool always generates legacy V1 RSVP tickets and attendees, and Event Tickets reads whichever RSVP repository is currently bound — so generated tickets/attendees will NOT show up in the Tickets or Attendees screens until you revert the migration below. The counts in "Currently generated" below are accurate; they read the V1 post types directly.', 'tec-data-generator' ); ?>
+			<?php esc_html_e( 'This site is running RSVP V2 (the rsvp-to-tc migration has completed), so RSVP tickets and attendees are generated as Tickets Commerce RSVPs. Revert the migration below first if you need V1 data to migrate.', 'tec-data-generator' ); ?>
 		</p>
 	</div>
 	<?php endif; ?>
@@ -201,9 +202,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 			<tr>
 				<th><?php esc_html_e( 'Editor', 'tec-data-generator' ); ?></th>
 				<td>
-					<label><input type="radio" name="tec-data-generator-events-editor" value="classic" checked> <?php esc_html_e( 'Classic', 'tec-data-generator' ); ?></label>
+					<label><input type="radio" name="tec-data-generator-events-editor" value="classic" <?php checked( 'classic', $default_editor ); ?>> <?php esc_html_e( 'Classic', 'tec-data-generator' ); ?></label>
 					&nbsp;&nbsp;
-					<label><input type="radio" name="tec-data-generator-events-editor" value="block"> <?php esc_html_e( 'Block', 'tec-data-generator' ); ?></label>
+					<label><input type="radio" name="tec-data-generator-events-editor" value="block" <?php checked( 'block', $default_editor ); ?>> <?php esc_html_e( 'Block', 'tec-data-generator' ); ?></label>
 				</td>
 			</tr>
 			<tr>
@@ -298,9 +299,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 			<tr>
 				<th><?php esc_html_e( 'Editor (new only)', 'tec-data-generator' ); ?></th>
 				<td>
-					<label><input type="radio" name="tec-data-generator-tickets-editor" value="classic" checked> <?php esc_html_e( 'Classic', 'tec-data-generator' ); ?></label>
+					<label><input type="radio" name="tec-data-generator-tickets-editor" value="classic" <?php checked( 'classic', $default_editor ); ?>> <?php esc_html_e( 'Classic', 'tec-data-generator' ); ?></label>
 					&nbsp;&nbsp;
-					<label><input type="radio" name="tec-data-generator-tickets-editor" value="block"> <?php esc_html_e( 'Block', 'tec-data-generator' ); ?></label>
+					<label><input type="radio" name="tec-data-generator-tickets-editor" value="block" <?php checked( 'block', $default_editor ); ?>> <?php esc_html_e( 'Block', 'tec-data-generator' ); ?></label>
 				</td>
 			</tr>
 			<tr>
@@ -311,6 +312,14 @@ if ( ! defined( 'ABSPATH' ) ) {
 					<label title="<?php esc_attr_e( 'Requires Events Pro or ECP plugin', 'tec-data-generator' ); ?>"><input type="checkbox" class="tec-data-generator-tickets-event-type" value="recurring" <?php disabled( empty( $plugin_availability['has_events_pro'] ) ); ?>> <?php esc_html_e( 'Recurring', 'tec-data-generator' ); ?></label>
 					&nbsp;&nbsp;
 					<label title="<?php esc_attr_e( 'Requires ECP plugin', 'tec-data-generator' ); ?>"><input type="checkbox" class="tec-data-generator-tickets-event-type" value="virtual" <?php disabled( empty( $plugin_availability['has_ecp'] ) ); ?>> <?php esc_html_e( 'Virtual', 'tec-data-generator' ); ?></label>
+				</td>
+			</tr>
+			<tr>
+				<th><?php esc_html_e( 'Attach (new events only)', 'tec-data-generator' ); ?></th>
+				<td>
+					<label><input type="checkbox" id="tec-data-generator-tickets-with-venues"> <?php esc_html_e( 'Venues', 'tec-data-generator' ); ?></label>
+					&nbsp;&nbsp;
+					<label><input type="checkbox" id="tec-data-generator-tickets-with-organizers"> <?php esc_html_e( 'Organizers', 'tec-data-generator' ); ?></label>
 				</td>
 			</tr>
 			<tr>

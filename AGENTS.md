@@ -7,7 +7,7 @@ The user can takes advantage of generate/delete data using skills located [skill
 ## What this plugin is
 
 A standalone QA-only tool, not part of Event Tickets. It exists solely to generate (and clean up) bulk
-test data — Events, Venues, Organizers, Event Series, legacy V1 RSVP tickets + attendees — so QA can stress-test
+test data — Events, Venues, Organizers, Event Series, RSVP tickets + attendees (V1 or V2, matching the site) — so QA can stress-test
 Event Tickets migrations at scale (thousands of tickets/attendees) and test series functionality. See `README.md` for usage.
 
 It also consolidates generation logic ported from two sibling extensions —
@@ -36,25 +36,23 @@ add it to the main plugin's Composer/npm setup as out of scope unless the user e
   the generated data indistinguishable from real user-created data, which is the entire point of the tool.
   Attendees have no such wrapper API; `wp_insert_post()` + the meta keys documented in `README.md` is correct
   there (see `../event-tickets/tests/_support/Commerce/Attendee_Maker.php` for the reference shape).
-- **`generate`/`scenario`'s default output is legacy V1 shape only** — never make them create Tickets
-  Commerce / RSVP V2 tickets. The deliberate exceptions are the paid-ticket paths, which create paid tickets
-  via whatever provider an existing event already uses: the standalone `add-tickets` command
-  (`Generator::add_paid_tickets()`), ported from `tec-ext-et-data-generator`, plus `generate-tickets
-  --ticket-type=paid` and the legacy `generate --ticket-type=paid` flag, which both reuse that same path —
-  confined to those paths; don't let paid creation leak anywhere else, and don't "fix" it by making it
-  V1-only, that's its whole point.
-- **RSVP ticket/attendee creation must produce V1 shape whether the site's RSVP feature is currently
-  running in V1 or V2 (Tickets Commerce-backed) mode.** Event Tickets 5.x resolves
-  `Tribe__Tickets__RSVP::save_ticket()`/`create_attendee_for_ticket()` through container-bound repositories
-  (`tickets.ticket-repository.rsvp` / `tickets.attendee-repository.rsvp`) rather than a hard-coded post
-  type — on a site that's already run the `rsvp-to-tc` migration (RSVP V2 active), those bindings point at
-  Tickets Commerce repositories, so calling `tribe( 'tickets.rsvp' )->ticket_add()`/`create_attendee_for_ticket()`
-  directly would silently create `tec_tc_ticket` posts instead of `tribe_rsvp_tickets`/`tribe_rsvp_attendees` —
-  invisible to `Cleanup::count_by_type()`/`count_all()`, which only know the V1 post types. `Generator`'s
-  `with_v1_rsvp_repositories()` wraps every such call to temporarily force the V1 repository classes (restoring
-  whatever was bound before), and every current/future call site that touches `tribe( 'tickets.rsvp' )` for
-  ticket or attendee creation must go through it. Verify against a site that has actually completed the
-  `rsvp-to-tc` migration (RSVP V2 active), not just a fresh V1 install — the divergence is invisible on V1.
+- **RSVP output follows the site's active RSVP version — V1 before the `rsvp-to-tc` migration, V2 after
+  it** (changed 2026-11-10; it used to be V1-only). Event Tickets only displays the RSVP shape whose
+  repository it has bound (`tickets.ticket-repository.rsvp`), so V1 data on a V2 site was real but invisible —
+  QA reported "attendees aren't attached". `Plugin_Availability::has_rsvp_v2()` (an `instanceof` against the
+  V2 `Ticket_Repository`, so an RSVP-disabled site isn't mistaken for V2) picks the shape; QA who need V1 data
+  to migrate on a migrated site run `revert` first. Paid tickets are separate: they go through whatever
+  provider an existing event already uses (`Generator::add_paid_tickets()`, backing `add-tickets` and
+  `--ticket-type=paid`) — don't let paid creation leak anywhere else.
+- **All RSVP tickets go through `Generator::add_rsvp_ticket()`, all API-created attendees through
+  `create_provider_attendee()`.** V1: `tribe( 'tickets.rsvp' )->ticket_add()`; V2: the Tickets Commerce
+  module's `ticket_add()` with `ticket_type=tc-rsvp`, price 0 and the event's provider meta set to the TC
+  module first — the same call Event Tickets' own V2 Classic Editor save makes. V2 attendees are created by
+  `tribe( 'tickets.attendees' )->create_attendee()` (a TC manual order per attendee, so stock and orders stay
+  consistent), then get `RSVP_V2::RSVP_STATUS_META_KEY` (`yes`/`no`) exactly as the V2 RSVP form writes it.
+  That manual order must be tagged too (kind `order`), or cleanup leaves `tec_tc_order` posts behind. The old
+  `with_v1_rsvp_repositories()` rebinding wrapper is gone: forcing V1 repositories on a V2 site is precisely
+  what produced the invisible data.
 - **Don't call `tribe( 'tickets.rsvp' )->create_attendee_for_ticket()` for the standalone `add-attendees`
   path** (fixed 2026-09-04, was fatal on Event Tickets 5.30) — it forwards its `$ticket` argument straight
   into `Tribe__Tickets__Attendees::create_attendee( $ticket, $data )`, which only accepts a
@@ -67,6 +65,9 @@ add it to the main plugin's Composer/npm setup as out of scope unless the user e
   only restricts which container post types `generate_batch()` creates (note: `generate-events` only accepts
   `event`, not `page`, since Events have their own post type); `editor` (`classic`/`block`) only switches
   container `post_content` between plain text and Gutenberg markup (tagged via `Data::EDITOR_META_KEY`).
+  An unset editor resolves to `Plugin_Availability::default_editor()` — the editor TEC opens events in —
+  because classic content opened in TEC's block editor gets a Venue block with no venue set, which reads as
+  "venue not attached". So CLI `--editor` has no `default:` and AJAX falls back to `''`, never `classic`.
   Neither may branch ticket creation — tickets always go through the production `ticket_add()` path
   regardless of editor. Don't invent a "block ticket" storage shape.
 - **Event start dates are randomized within a `date_start`/`date_end` range, not sequential.** `Generator::normalize_date_range()`
@@ -86,13 +87,10 @@ add it to the main plugin's Composer/npm setup as out of scope unless the user e
   `add-rsvp`/`add-tickets` ticket sold out on creation (both fixed 2026-09-10). If the real default is
   computed in PHP, describe it in the `:` line and leave the `---` block out entirely — only literal,
   parseable values belong there.
-- **RSVP creation calls `ticket_add()` exactly once, inside `with_v1_rsvp_repositories()`.** A second,
-  unwrapped `ticket_add()` "so the V2 admin can see it" was added and removed again (2026-09-10): on a
-  V1 site it created a duplicate empty ticket beside the real one, and on a V2 site it created a
-  `tec_tc_ticket` that *shadowed* the V1 ticket in `Tribe__Tickets__Tickets::get_all_event_tickets()`
-  while holding zero attendees — the "generated events have no attendees" report. V1 data being
-  invisible on a migrated site is expected, not a bug to paper over; `Plugin_Availability::has_rsvp_v2()`
-  warns about it in the CLI and on the admin page instead. Don't reintroduce a V2 write path here.
+- **RSVP creation calls `ticket_add()` exactly once, in one shape.** A second, unconditional
+  `ticket_add()` "so the V2 admin can see it" was added and removed again (2026-09-10): on a V1 site it
+  created a duplicate empty ticket beside the real one, and on a V2 site a `tec_tc_ticket` that *shadowed* the
+  V1 ticket while holding zero attendees. `add_rsvp_ticket()` picks V1 *or* V2 — never write both.
 - **Anything that writes attendees with raw `wp_insert_post()` must call
   `Generator::clear_attendee_cache()` afterwards.** `Tribe__Tickets__Tickets::get_event_attendees()`
   caches per post in a `Tribe__Post_Transient` for an hour (2 minutes on admin screens), and
@@ -234,8 +232,8 @@ working V1 *and* V2 RSVP creation code that goes through the same production API
 - V2 (Tickets Commerce RSVP): `.../Commerce/RSVP/V2/Ticket_Maker.php`, `.../Commerce/RSVP/V2/Attendee_Maker.php`,
   and `Production_Ticket_Maker::create_production_tc_rsvp_ticket()`.
 
-If a future task here needs V2/post-migration data shapes (this plugin currently only creates V1 — see Hard
-constraints), copy/adapt from those traits rather than working out the meta shape from scratch. They're
+When changing either shape, copy/adapt from those traits rather than working out the meta shape from
+scratch (the V2 path mirrors `create_production_tc_rsvp_ticket()`). They're
 test-only code (not autoloadable from this plugin without Composer), so treat them as a reference to port
 logic from, not a dependency to require.
 
@@ -287,11 +285,13 @@ If you don't have a live WP/Lando environment available in your session, say so 
 claiming the change works — `php -l` only catches syntax errors, not whether the WordPress/Event
 Tickets/The Events Calendar APIs were called correctly.
 
-After any change touching RSVP ticket/attendee creation (`create_rsvp_ticket()`, `create_adhoc_rsvp_ticket()`,
-`add_attendees()`'s RSVP branch, or `with_v1_rsvp_repositories()` itself), smoke-test on **both** an RSVP V1
-site and one that has completed the `rsvp-to-tc` migration (RSVP V2 active) — check the admin page's
-"Currently generated" Ticket count actually increments after `add-rsvp`/`generate-tickets` on the V2 site.
-The V1-vs-V2 divergence is invisible if you only ever test against a fresh V1 install.
+After any change touching RSVP ticket/attendee creation (`add_rsvp_ticket()`, `create_provider_attendee()`,
+`create_attendees_for_ticket()`, `add_attendees()`), smoke-test on **both** an RSVP V1 site and one that has
+completed the `rsvp-to-tc` migration (RSVP V2 active), and check that Event Tickets itself sees the data:
+`Tribe__Tickets__Tickets::get_all_event_tickets()`/`get_event_attendees()` on a generated event, not just the
+generator's own counts. A V2 site can be driven in V1 mode for one CLI call without reverting it:
+`wp --require=<file> tec-data-generator generate …`, where the file runs
+`WP_CLI::add_wp_hook( 'tec_tickets_rsvp_version', fn() => 'v1' );`.
 
 ## Coding style
 

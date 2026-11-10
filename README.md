@@ -1,8 +1,14 @@
 # TEC Data Generator
 
-A standalone QA tool that generates bulk test data — **Events, Venues, Organizers, and legacy V1 RSVP
-tickets with attendees** — so migrations like `rsvp-to-tc` in Event Tickets can be
-stress-tested at scale (thousands of records at once) before shipping broadly.
+A standalone QA tool that generates bulk test data — **Events, Venues, Organizers, and RSVP tickets with
+attendees** — so migrations like `rsvp-to-tc` in Event Tickets can be stress-tested at scale (thousands of
+records at once) before shipping broadly.
+
+RSVPs are generated in whichever version the site currently runs: legacy V1 (`tribe_rsvp_tickets` /
+`tribe_rsvp_attendees`) before the `rsvp-to-tc` migration, V2 (Tickets Commerce `tec_tc_ticket` of type
+`tc-rsvp`, with `tec_tc_attendee`s inside `tec_tc_order`s) after it — so Event Tickets always displays what
+was generated. To generate V1 data for migration testing on a migrated site, run
+`wp tec-data-generator revert` first.
 
 This is **not** part of Event Tickets. It's a separate, throwaway plugin meant to be shared with QA, run
 once (or a few times) against a disposable test site, and removed.
@@ -36,13 +42,15 @@ For each unit:
 
 1. One post — an Event (`tribe_events`, created via The Events Calendar's own repository so it has valid
    dates), a Page, or a Post — round-robined so the total splits evenly across all three types.
-2. One or more legacy RSVP tickets (`tribe_rsvp_tickets`) on that post (`generate` always creates exactly 1;
-   `scenario` creates a random number per unit within its preset range), each created through the same
-   production code path (`Tribe__Tickets__RSVP::ticket_add()`) a real user going through the classic editor
-   metabox would hit — not a raw `wp_insert_post()`. Capacity is randomized (20–200).
-3. A random number of attendees (`tribe_rsvp_attendees`) per ticket within the configured min/max range,
-   capped at the ticket's capacity, spread across a random number of `_tribe_rsvp_order` groups — so a single
-   ticket can produce several distinct "orders" once migrated, not just one. ~90% are marked "going".
+2. One or more RSVP tickets on that post (`generate` always creates exactly 1; `scenario` creates a random
+   number per unit within its preset range), each created through the same production `ticket_add()` path a
+   real user would hit — `Tribe__Tickets__RSVP::ticket_add()` on a V1 site, the Tickets Commerce module's
+   `ticket_add()` with `ticket_type=tc-rsvp` on a V2 site — not a raw `wp_insert_post()`. Capacity is
+   randomized (20–200).
+3. A random number of attendees per ticket within the configured min/max range, capped at the ticket's
+   capacity. ~90% are marked "going". On V1 they're `tribe_rsvp_attendees` spread across a random number of
+   `_tribe_rsvp_order` groups — so a single ticket can produce several distinct "orders" once migrated. On V2
+   each is created through the provider's own `create_attendee()` (one Tickets Commerce order each).
 
 Everything created is tagged with `_tec_data_generator_generated = 1` (plus a run ID). **Nothing untagged is ever
 touched** — cleanup only ever deletes what this tool created.
@@ -163,8 +171,9 @@ Creates Event containers only, with no tickets attached. Use this when `generate
 containers + tickets isn't what you want.
 
 ```bash
-wp tec-data-generator generate-events --count=50 --editor=block  # block-editor markup
-wp tec-data-generator generate-events --count=20                 # classic editor (default)
+wp tec-data-generator generate-events --count=50 --editor=block    # block-editor markup
+wp tec-data-generator generate-events --count=20 --editor=classic  # plain post_content
+wp tec-data-generator generate-events --count=20                   # whichever editor events open in
 ```
 
 Flags: `--count` (default 100), `--editor` (see [Container editor](#container-editor-classic--block) below),
@@ -185,8 +194,8 @@ wp tec-data-generator generate-tickets --event-id=123 --quantity=5 --ticket-type
 
 Flags: without `--event-id`, creates `--count` fresh containers (default 10, `--container`/`--editor`/
 `--event-types` as above) with `--min-tickets`/`--max-tickets` per container (defaults 1/1),
-`--min-attendees`/`--max-attendees` per ticket (defaults 1/20), and `--start-date`/`--end-date` (default now
-through +2 weeks, ignored with `--event-id`); with `--event-id`, attaches `--quantity` tickets (default 5) to
+`--min-attendees`/`--max-attendees` per ticket (defaults 1/20), `--with-venues`/`--with-organizers`, and
+`--start-date`/`--end-date` (default now through +2 weeks; all three ignored with `--event-id`); with `--event-id`, attaches `--quantity` tickets (default 5) to
 that existing post instead. `--ticket-type` is `rsvp` (default) or `paid`.
 
 ### `generate-series`
@@ -214,8 +223,10 @@ table. All events are tagged with the usual generated marker and run ID, so `cle
 #### Container editor (`classic` / `block`)
 
 `generate-events`, `generate-tickets` (new containers only), and the matching admin sections all expose an
-editor radio. `classic` (default) writes plain `post_content` exactly as before; `block` wraps the same
-words in real Gutenberg paragraph/heading markup so the container opens in the block editor. Every container
+editor radio. `classic` writes plain `post_content`; `block` wraps the same words in real Gutenberg
+paragraph/heading markup (events get TEC's full block template, with the linked venue/organizer IDs). When
+no editor is given, it defaults to the editor The Events Calendar opens events in — classic content opened in
+the block editor gets TEC's "classic" template, whose Venue block shows no venue even though one is linked. Every container
 is tagged with `_tec_data_generator_editor` (`classic`/`block`) alongside the usual generated marker, and
 cleanup finds both. Ticket creation is unaffected — tickets always go through the production `ticket_add()`
 path regardless of editor.
@@ -232,9 +243,10 @@ wp tec-data-generator add-tickets <event_id> --quantity=5      # paid tickets, v
 wp tec-data-generator add-attendees <ticket_id> --quantity=10
 ```
 
-`add-tickets` creates **paid** tickets (Tickets Commerce/PayPal/etc.), not RSVP — this is the one place in
-this plugin that isn't V1-RSVP-shaped, by design. It returns "0 tickets added" if the event's provider is
-RSVP (paid tickets don't apply there).
+`add-tickets` creates **paid** tickets (Tickets Commerce/PayPal/etc.), not RSVP. It returns "0 tickets added"
+if the event's provider is V1 RSVP (paid tickets don't apply there). `add-rsvp` and `add-attendees` follow the
+site's RSVP version like everything else; `add-attendees` on a V2 RSVP ticket also sets its going/not-going
+status.
 
 ### `cleanup`
 

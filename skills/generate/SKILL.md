@@ -1,6 +1,6 @@
 ---
 name: tec-dg-generate
-description: Generate bulk V1 test units (Event/Page/Post + RSVP ticket + attendees) with wp tec-data-generator generate. Use for load-test data, smoke runs before large generation, custom attendee ranges, event-types and ticket-type flags.
+description: Generate bulk test units (Event/Page/Post + RSVP ticket + attendees) with wp tec-data-generator generate. Use for load-test data, smoke runs before large generation, custom attendee ranges, event-types and ticket-type flags.
 ---
 
 # Generate bulk test units
@@ -33,7 +33,7 @@ wp tec-data-generator generate --count=50 --event-types=virtual --ticket-type=pa
 ## Safety
 
 - Always smoke-test small (`--count=30`) before thousands.
-- Default output is V1 RSVP only; `paid` reuses the add-tickets provider path.
+- RSVP output follows the site's RSVP version (V1 before `rsvp-to-tc`, V2 Tickets Commerce after); `paid` reuses the add-tickets provider path.
 - Everything created is tagged `_tec_data_generator_generated` + run ID.
 - No Composer, no Faker, no build step.
 

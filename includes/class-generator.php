@@ -1,11 +1,16 @@
 <?php
 /**
- * Creates legacy V1 RSVP tickets (with attendees, grouped into orders) on freshly
- * created Event/Page/Post content, using the same production code paths real
- * user-created data goes through.
+ * Creates RSVP tickets (with attendees) on freshly created Event/Page/Post content, in
+ * whichever shape the site's RSVP feature runs — legacy V1 or V2 Tickets Commerce —
+ * using the same production code paths real user-created data goes through.
  */
 
 namespace TEC\DataGenerator;
+
+use TEC\Tickets\Commerce\Module as Tickets_Commerce;
+use TEC\Tickets\Commerce\Ticket as Tickets_Commerce_Ticket;
+use TEC\Tickets\RSVP\V2\Constants as RSVP_V2;
+use Tribe__Tickets__RSVP;
 
 class Generator {
 
@@ -95,7 +100,7 @@ class Generator {
 		$this->options['event_types'] = $this->normalize_event_types( $this->options['event_types'] ?? [ 'single' ] );
 		$this->options['ticket_type'] = $this->options['ticket_type'] ?? 'rsvp';
 		$this->options['container'] = $this->normalize_container( $this->options['container'] ?? 'mixed' );
-		$this->options['editor'] = $this->normalize_editor( $this->options['editor'] ?? 'classic' );
+		$this->options['editor'] = $this->normalize_editor( $this->options['editor'] ?? '' );
 		$this->normalize_date_range();
 		$this->validate_options();
 
@@ -179,27 +184,21 @@ class Generator {
 			],
 		];
 
-		$ticket_id = $this->with_v1_rsvp_repositories( function () use ( $event_id, $data ) {
-			return tribe( 'tickets.rsvp' )->ticket_add( $event_id, $data );
-		} );
+		$ticket_id = $this->add_rsvp_ticket( $event_id, $data );
 
 		if ( ! $ticket_id ) {
 			return 0;
 		}
 
-		$this->tag_generated( (int) $ticket_id, 'ticket' );
+		$this->tag_generated( $ticket_id, 'ticket' );
 
-		// Ensure the event's default ticket provider is set so the admin UI displays the tickets metabox.
-		update_post_meta( $event_id, '_tribe_default_ticket_provider', \Tribe__Tickets__RSVP::class );
-
-		return (int) $ticket_id;
+		return $ticket_id;
 	}
 
 	/**
 	 * Adds paid tickets (via whatever provider the event already uses — Tickets Commerce, PayPal,
-	 * etc.) to an existing event. This is the one deliberate exception to this plugin's "V1 RSVP
-	 * shape only" default: it exists solely for this standalone command, `generate`/`scenario`
-	 * never call it.
+	 * etc.) to an existing event. Backs `add-tickets`, plus the `paid` ticket type of
+	 * `generate`/`generate-tickets`/`generate-series`.
 	 *
 	 * @param array{capacity?:int,stock?:int,unlimited_capacity?:bool,shared_capacity?:bool} $options
 	 *
@@ -266,14 +265,14 @@ class Generator {
 	}
 
 	/**
-	 * Adds attendees to an existing ticket (RSVP or paid) — backs the standalone `add-attendees`
-	 * CLI/AJAX command. RSVP attendees are built directly via the same `wp_insert_post()` writer
-	 * `generate_batch()` uses (`create_single_attendee()`) rather than
+	 * Adds attendees to an existing ticket (V1 RSVP, V2 RSVP or paid) — backs the standalone
+	 * `add-attendees` CLI/AJAX command. V1 RSVP attendees are built directly via the same
+	 * `wp_insert_post()` writer `generate_batch()` uses (`create_single_attendee()`) rather than
 	 * `tribe( 'tickets.rsvp' )->create_attendee_for_ticket()`: that method forwards its `$ticket`
 	 * argument into Event Tickets 5.30's `Tribe__Tickets__Attendees::create_attendee()`, which only
 	 * accepts a `Tribe__Tickets__Ticket_Object|int` — a `WP_Post` fails its `is_numeric()` check and
-	 * falls through to `$ticket->get_provider()`, a fatal `\Error` (not an `\Exception`, so the old
-	 * `catch` here never caught it).
+	 * falls through to `$ticket->get_provider()`, a fatal `\Error`. Every other ticket goes through
+	 * its provider's API (`create_provider_attendee()`).
 	 *
 	 * @return int[] Created attendee IDs.
 	 */
@@ -285,32 +284,23 @@ class Generator {
 			return [];
 		}
 
-		$is_rsvp = 'tribe_rsvp_tickets' === $ticket_post->post_type;
-		$event_id = $is_rsvp ? (int) get_post_meta( $ticket_id, '_tribe_rsvp_for_event', true ) : 0;
+		$is_v1_rsvp = 'tribe_rsvp_tickets' === $ticket_post->post_type;
+		$is_v2_rsvp = ! $is_v1_rsvp && $this->is_v2_rsvp_ticket( $ticket_id );
+		$event_id   = (int) get_post_meta(
+			$ticket_id,
+			$is_v1_rsvp ? '_tribe_rsvp_for_event' : Tickets_Commerce_Ticket::$event_relation_meta_key,
+			true
+		);
 
-		if ( $is_rsvp && ! $event_id ) {
+		if ( $is_v1_rsvp && ! $event_id ) {
 			return [];
 		}
 
 		for ( $i = 0; $i < $quantity; $i++ ) {
-			$attendee_id = 0;
-
 			try {
-				if ( $is_rsvp ) {
-					$status      = wp_rand( 1, 100 ) <= 90 ? 'yes' : 'no';
-					$attendee_id = $this->create_single_attendee( $ticket_id, $event_id, md5( uniqid( "adhoc-{$ticket_id}-{$i}", true ) ), $status, $i );
-				} else {
-					[ $full_name, $email ] = Data::random_person( $ticket_id, $i );
-					$attendee    = tribe( 'tickets.attendees' )->create_attendee( $ticket_id, [
-						'full_name' => $full_name,
-						'email'     => $email,
-					] );
-					$attendee_id = $attendee instanceof \WP_Post ? $attendee->ID : 0;
-
-					if ( $attendee_id ) {
-						$this->tag_generated( $attendee_id, 'attendee' );
-					}
-				}
+				$attendee_id = $is_v1_rsvp
+					? $this->create_single_attendee( $ticket_id, $event_id, md5( uniqid( "adhoc-{$ticket_id}-{$i}", true ) ), $this->random_rsvp_status(), $i )
+					: $this->create_provider_attendee( $ticket_id, $i, $is_v2_rsvp ? $this->random_rsvp_status() : null );
 			} catch ( \Throwable $e ) {
 				continue;
 			}
@@ -338,7 +328,7 @@ class Generator {
 	 *     @type bool $with_venues       Attach different venue to each event. Default false.
 	 *     @type bool $with_organizers   Attach different organizer to each event. Default false.
 	 *     @type string $ticket_type     Ticket mode: rsvp, paid, or none. Default 'rsvp'.
-	 *     @type string $editor          Container editor: classic or block. Default 'classic'.
+	 *     @type string $editor          Container editor: classic or block. Default: the editor events open in.
 	 * }
 	 *
 	 * @return array{created:int,series_ids:int[],post_ids:int[],ticket_ids:int[],attendee_ids:int[]}
@@ -346,7 +336,7 @@ class Generator {
 	public function generate_series( int $count, int $offset, int $events_per_series = 5, array $options = [] ): array {
 		$this->options = $options;
 		$this->options['ticket_type'] = $this->options['ticket_type'] ?? 'rsvp';
-		$this->options['editor'] = $this->normalize_editor( $this->options['editor'] ?? 'classic' );
+		$this->options['editor'] = $this->normalize_editor( $this->options['editor'] ?? '' );
 		$this->options['event_types'] = [ 'single' ];
 		$this->normalize_date_range();
 
@@ -506,12 +496,17 @@ class Generator {
 	}
 
 	/**
-	 * Normalizes the editor choice to a known value.
+	 * Normalizes the editor choice to a known value; an empty choice resolves to the editor
+	 * events open in on this site (Plugin_Availability::default_editor()).
 	 *
 	 * @throws \Exception On unknown editor names.
 	 */
 	private function normalize_editor( $editor ): string {
-		$editor = is_string( $editor ) ? strtolower( trim( $editor ) ) : 'classic';
+		$editor = is_string( $editor ) ? strtolower( trim( $editor ) ) : '';
+
+		if ( '' === $editor ) {
+			return Plugin_Availability::default_editor();
+		}
 
 		if ( ! in_array( $editor, [ 'classic', 'block' ], true ) ) {
 			throw new \Exception(
@@ -574,7 +569,7 @@ class Generator {
 
 		$blocks = [
 			'<!-- wp:tribe/event-datetime /-->',
-			sprintf( '<!-- wp:paragraph {"placeholder":"Add Description..."} -->\n<p>%s</p>\n<!-- /wp:paragraph -->', esc_html( wp_strip_all_tags( $plain ) ) ),
+			sprintf( "<!-- wp:paragraph {\"placeholder\":\"Add Description...\"} -->\n<p>%s</p>\n<!-- /wp:paragraph -->", esc_html( wp_strip_all_tags( $plain ) ) ),
 			'<!-- wp:tribe/event-price /-->',
 			$organizer_block,
 			$venue_block,
@@ -743,7 +738,7 @@ class Generator {
 
 	/**
 	 * Attaches tickets to a freshly created container post according to the ticket_type
-	 * option: 'rsvp' (existing V1 path), 'paid' (existing provider path), 'none' (skip).
+	 * option: 'rsvp' (V1 or V2, matching the site), 'paid' (existing provider path), 'none' (skip).
 	 *
 	 * @return array{ticket_ids:int[],attendee_ids:int[]}
 	 */
@@ -1081,8 +1076,7 @@ class Generator {
 	}
 
 	/**
-	 * Creates a legacy V1 RSVP ticket via the real production code path
-	 * (`Tribe__Tickets__Tickets::ticket_add()` → `Tribe__Tickets__RSVP::save_ticket()`),
+	 * Creates an RSVP ticket via the real production `ticket_add()` path (see add_rsvp_ticket()),
 	 * so generated tickets are indistinguishable from real user-created ones.
 	 *
 	 * @param int $index RSVP index within this unit (0 for the first/only ticket on the post),
@@ -1106,25 +1100,99 @@ class Generator {
 			],
 		];
 
-		$ticket_id = $this->with_v1_rsvp_repositories( function () use ( $post_id, $data ) {
-			return tribe( 'tickets.rsvp' )->ticket_add( $post_id, $data );
-		} );
+		$ticket_id = $this->add_rsvp_ticket( $post_id, $data );
 
 		if ( ! $ticket_id ) {
 			return 0;
 		}
 
-		$this->tag_generated( (int) $ticket_id, 'ticket' );
+		$this->tag_generated( $ticket_id, 'ticket' );
 
-		// Ensure the event's default ticket provider is set so the admin UI displays the tickets metabox.
-		update_post_meta( $post_id, '_tribe_default_ticket_provider', \Tribe__Tickets__RSVP::class );
-
-		return (int) $ticket_id;
+		return $ticket_id;
 	}
 
 	/**
-	 * Creates a random number of attendees for a ticket, spread across a random number
-	 * of `_tribe_rsvp_order` groups, to stress the migration's order-grouping logic.
+	 * Creates an RSVP ticket in whichever shape the site's RSVP feature currently reads: a legacy
+	 * V1 `tribe_rsvp_tickets` post, or a V2 Tickets Commerce `tec_tc_ticket` of type `tc-rsvp`
+	 * (the same `ticket_add()` call Event Tickets' V2 Classic Editor save makes). Writing V1 on a
+	 * V2 site produced data Event Tickets never displays.
+	 *
+	 * @param array<string,mixed> $data `ticket_add()` payload.
+	 */
+	private function add_rsvp_ticket( int $post_id, array $data ): int {
+		$is_v2    = Plugin_Availability::has_rsvp_v2();
+		$provider = $is_v2 ? Tickets_Commerce::class : Tribe__Tickets__RSVP::class;
+
+		// The event's provider decides which tickets metabox/block the editor shows.
+		update_post_meta( $post_id, tribe( 'tickets.handler' )->key_provider_field, $provider );
+
+		if ( ! $is_v2 ) {
+			return (int) tribe( 'tickets.rsvp' )->ticket_add( $post_id, $data );
+		}
+
+		$data['ticket_price'] = 0;
+		$data['ticket_type']  = RSVP_V2::TC_RSVP_TYPE;
+
+		return (int) Tickets_Commerce::get_instance()->ticket_add( $post_id, $data );
+	}
+
+	/**
+	 * Creates one attendee through the ticket provider's own API (a Tickets Commerce manual
+	 * order for TC tickets), so stock and orders stay consistent. V2 RSVP attendees also get the
+	 * going/not-going status the V2 RSVP form writes after its order completes.
+	 *
+	 * @param string|null $rsvp_status 'yes'/'no' for V2 RSVP tickets, null for paid tickets.
+	 *
+	 * @return int Attendee post ID, 0 on failure.
+	 */
+	private function create_provider_attendee( int $ticket_id, int $sub_seq, ?string $rsvp_status = null ): int {
+		[ $full_name, $email ] = Data::random_person( $ticket_id, $sub_seq );
+
+		$attendee    = tribe( 'tickets.attendees' )->create_attendee( $ticket_id, [
+			'full_name' => $full_name,
+			'email'     => $email,
+		] );
+		$attendee_id = $attendee instanceof \WP_Post ? $attendee->ID : 0;
+
+		if ( ! $attendee_id ) {
+			return 0;
+		}
+
+		if ( null !== $rsvp_status ) {
+			update_post_meta( $attendee_id, RSVP_V2::RSVP_STATUS_META_KEY, $rsvp_status );
+		}
+
+		$this->tag_generated( $attendee_id, 'attendee' );
+
+		// The manual order wrapping the attendee is ours too; untagged, cleanup would leave it behind.
+		$order_id = wp_get_post_parent_id( $attendee_id );
+
+		if ( $order_id && 'tec_tc_order' === get_post_type( $order_id ) ) {
+			$this->tag_generated( $order_id, 'order' );
+		}
+
+		return $attendee_id;
+	}
+
+	/**
+	 * Whether a ticket is a V2 (Tickets Commerce) RSVP rather than a paid ticket.
+	 */
+	private function is_v2_rsvp_ticket( int $ticket_id ): bool {
+		return class_exists( RSVP_V2::class )
+			&& RSVP_V2::TC_RSVP_TYPE === get_post_meta( $ticket_id, Tickets_Commerce_Ticket::$type_meta_key, true );
+	}
+
+	/**
+	 * 90% "going", 10% "not going" — the split every generated RSVP attendee uses.
+	 */
+	private function random_rsvp_status(): string {
+		return wp_rand( 1, 100 ) <= 90 ? 'yes' : 'no';
+	}
+
+	/**
+	 * Creates a random number of attendees for a ticket. V1 tickets spread them across a random
+	 * number of `_tribe_rsvp_order` groups, to stress the migration's order-grouping logic; V2
+	 * tickets get one Tickets Commerce order per attendee.
 	 *
 	 * @return int[] Attendee post IDs.
 	 */
@@ -1138,7 +1206,24 @@ class Generator {
 		}
 
 		$attendee_count = wp_rand( $min_attendees, $max_attendees );
-		$order_count    = wp_rand( 1, $attendee_count );
+
+		if ( $this->is_v2_rsvp_ticket( $ticket_id ) ) {
+			$attendee_ids = [];
+
+			for ( $i = 0; $i < $attendee_count; $i++ ) {
+				$attendee_id = $this->create_provider_attendee( $ticket_id, $i, $this->random_rsvp_status() );
+
+				if ( $attendee_id ) {
+					$attendee_ids[] = $attendee_id;
+				}
+			}
+
+			$this->clear_attendee_cache( $post_id );
+
+			return $attendee_ids;
+		}
+
+		$order_count = wp_rand( 1, $attendee_count );
 
 		$order_hashes = [];
 		for ( $o = 0; $o < $order_count; $o++ ) {
@@ -1157,7 +1242,7 @@ class Generator {
 		$total_sales  = 0;
 
 		foreach ( $assignments as $i => $order_hash ) {
-			$status = wp_rand( 1, 100 ) <= 90 ? 'yes' : 'no';
+			$status = $this->random_rsvp_status();
 
 			$attendee_id = $this->create_single_attendee( $ticket_id, $post_id, $order_hash, $status, $i );
 
@@ -1354,65 +1439,6 @@ class Generator {
 		}
 
 		return (string) wp_remote_retrieve_body( $response );
-	}
-
-	/**
-	 * Forces `tribe( 'tickets.rsvp' )` calls made inside $callback to create the legacy V1
-	 * `tribe_rsvp_tickets`/`tribe_rsvp_attendees` shape, regardless of whether the site's RSVP
-	 * feature is currently running in V1 or V2 (Tickets Commerce-backed) mode.
-	 *
-	 * Event Tickets 5.x resolves `Tribe__Tickets__RSVP::save_ticket()` and
-	 * `create_attendee_for_ticket()` through container-bound repositories
-	 * (`tickets.ticket-repository.rsvp` / `tickets.attendee-repository.rsvp`) rather than
-	 * hard-coding the post type — on a site that's already run the rsvp-to-tc migration (RSVP
-	 * V2 active), those bindings point at Tickets Commerce repositories, so the "same production
-	 * API" this plugin relies on would silently create `tec_tc_ticket` posts instead of the V1
-	 * shape this tool's whole purpose depends on. Temporarily rebinding to the known V1
-	 * repository classes guarantees V1 output on both V1 and V2 sites, then restores whatever
-	 * was bound before so the rest of the site is unaffected.
-	 *
-	 * @template T
-	 * @param callable():T $callback
-	 * @return T
-	 */
-	private function with_v1_rsvp_repositories( callable $callback ) {
-		if ( ! class_exists( '\Tribe__Tickets__Repositories__Ticket__RSVP' ) || ! function_exists( 'tribe' ) ) {
-			return $callback();
-		}
-
-		$container = tribe();
-
-		$previous_ticket_repo   = $this->safe_make( $container, 'tickets.ticket-repository.rsvp' );
-		$previous_attendee_repo = $this->safe_make( $container, 'tickets.attendee-repository.rsvp' );
-
-		$container->bind( 'tickets.ticket-repository.rsvp', \Tribe__Tickets__Repositories__Ticket__RSVP::class );
-
-		if ( class_exists( '\Tribe__Tickets__Repositories__Attendee__RSVP' ) ) {
-			$container->bind( 'tickets.attendee-repository.rsvp', \Tribe__Tickets__Repositories__Attendee__RSVP::class );
-		}
-
-		try {
-			return $callback();
-		} finally {
-			if ( $previous_ticket_repo ) {
-				$container->bind( 'tickets.ticket-repository.rsvp', get_class( $previous_ticket_repo ) );
-			}
-
-			if ( $previous_attendee_repo ) {
-				$container->bind( 'tickets.attendee-repository.rsvp', get_class( $previous_attendee_repo ) );
-			}
-		}
-	}
-
-	/**
-	 * @return object|null
-	 */
-	private function safe_make( $container, string $id ) {
-		try {
-			return $container->make( $id );
-		} catch ( \Exception $e ) {
-			return null;
-		}
 	}
 
 	/**
